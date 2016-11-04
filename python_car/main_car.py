@@ -3,8 +3,6 @@
 Usage:
 	main_car.py record
 	main_car.py tf
-	main_car.py tf-and-record
-	main_car.py lame-odo-driving <path-to-model>
 """
 
 import math
@@ -35,16 +33,8 @@ if args['record']:
 	print("\n------ Ready to record training data ------\n")
 elif args['tf']:
 	we_are_autonomous = True
-	we_are_recording = False
-	print("\n****** READY TO DRIVE BY NEURAL NET ******\n")
-elif args['tf-and-record']:
-	we_are_autonomous = True
 	we_are_recording = True
 	print("\n****** READY TO DRIVE BY NEURAL NET and record data ******\n")
-elif args['lame-odo-driving']:
-	we_are_autonomous = True
-	we_are_recording = True
-	print("\n****** READY TO DRIVE BY LAME ODO ONLY and record data ******\n")
 
 
 # Set up camera and key watcher.
@@ -147,11 +137,9 @@ def process_input(port_in, port_out):
 
 def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Adjust the steering and throttle.
-	# steering = 90 if 89 <= steering <= 91 else steering
 	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 110)
 	# Update steering
 	if old_steering != steering:
-		print 'new steering: ', steering
 		port_out.write(('S%d\n' % steering).encode('ascii'))
 	# Update throttle
 	if old_throttle != throttle:
@@ -342,7 +330,7 @@ def main():
 			steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
 		if we_are_recording and currently_running:
-			# TODO(matt): also record vel in filename for tf-and-record?
+			# TODO(matt): also record vel in filename for tf?
 			# Read a frame from the camera.
 			frame = camera_stream.read()
 			# Save image with car data in filename.
