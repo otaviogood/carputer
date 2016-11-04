@@ -17,8 +17,8 @@ class CameraStream(object):
         sys.exit("Error: Camera didn't open for capture.")
 
     # Setup frame dims.
-    self.stream.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 160)
-    self.stream.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 120)
+    self.stream.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
+    self.stream.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
 
     self.grabbed, self.frame = self.stream.read()
     self.stopped = False
