@@ -188,8 +188,6 @@ if True:
 		resized = resized.ravel()  # flatten the shape of the tensor.
 		resized = resized[np.newaxis]  # make a batch of size 1.
 		# scale values to match what's in filemash.
-		# lidar_frame = lidar_frame.ravel()
-		# lidar_frame = lidar_frame[np.newaxis]
 
 		odo_arr = np.array([odo_relative_to_start / 1000.0])[np.newaxis]
 		vel_arr = np.array([speed * 10.0])[np.newaxis]
@@ -269,12 +267,10 @@ def main():
 				last_odometer_reset = odometer_ticks
 				if we_are_recording and (not we_are_autonomous):
 					session_full_path = make_data_folder('~/training-images')
-					# lidar_full_path = make_data_folder('~/lidar-images')
 					print 'STARTING TO RECORD.'
 					print 'Folder: %s' % session_full_path
 				elif we_are_recording and we_are_autonomous:
 					session_full_path = make_data_folder('~/tf-driving-images')
-					# lidar_full_path = make_data_folder('~/tf-lidar-images')
 					print 'DRIVING AUTONOMOUSLY and STARTING TO RECORD'
 					print 'Folder: %s' % session_full_path
 				else:
@@ -344,7 +340,6 @@ def main():
 		else:
 			frame = camera_stream.read()
 			cv2.imwrite('/tmp/test.png', frame)
-
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.
