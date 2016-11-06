@@ -120,9 +120,9 @@ def gen_graph_ops():
     W_fc4 = weight_variable([fc3_num_outs, num_outputs], fc3_num_outs, num_outputs, name='W_fc4')
     b_fc4 = bias_variable([num_outputs])
 
-    output = tf.nn.softmax(tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
-    steering = output[:, :max_log_outs]
-    throttle = output[:, max_log_outs:]
+    output = (tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
+    steering = tf.nn.softmax(output[:, :max_log_outs])
+    throttle = tf.nn.softmax(output[:, max_log_outs:])
 
     # cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
     # http://stackoverflow.com/questions/33712178/tensorflow-nan-bug
