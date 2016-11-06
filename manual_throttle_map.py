@@ -23,7 +23,7 @@ throttle_max_range_map = [
 map_back = {5:90}
 
 def to_throttle_buckets(t):
-    t = int(t+0.5) #nearest
+    t = int(float(t)+0.5) #nearest
 
     for max_in_bucket,bucket in throttle_max_range_map:
         if t <= max_in_bucket:
@@ -31,6 +31,7 @@ def to_throttle_buckets(t):
     return 14
 
 def from_throttle_buckets(t):
+    t = int(float(t)+0.5)
     for ibucket,(max_in_bucket,bucket) in enumerate(throttle_max_range_map):
         if t == bucket:
             if map_back.has_key(bucket):
