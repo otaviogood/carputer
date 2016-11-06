@@ -23,7 +23,7 @@ from PIL import Image
 import cv2
 import Warp
 import numpy as np
-
+import manual_throttle_map
 
 # Parse args.
 args = docopt(__doc__)
@@ -127,7 +127,7 @@ if __name__ == '__main__':
             last_millis = millis
 
         throttle = int(float(s_ahead[3]))
-        log_throttle = do_log_mapping_to_buckets(throttle - 90)
+        log_throttle = manual_throttle_map.to_throttle_buckets(throttle) #do_log_mapping_to_buckets(throttle - 90)
         steer = int(float(s_ahead[5]))
         log_steer = do_log_mapping_to_buckets(steer - 90)
 

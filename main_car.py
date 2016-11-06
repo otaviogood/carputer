@@ -21,6 +21,8 @@ import camera
 import key_watcher
 import NeuralNet.convnetshared1 as convshared
 
+import manual_throttle_map
+
 
 # Get args.
 args = docopt(__doc__)
@@ -198,7 +200,7 @@ if True:
 			pulse_arr[0, num] = max(0.0, 1 - abs(current_odo - num))
 		steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr})  # run tensorflow
 		steer = invert_log_bucket(steering_result[0])
-		throt = invert_log_bucket(throttle_result[0])
+		throt = manual_throttle_map.from_throttle_buckets(throttle_result[0])
 		return (steer, throt)
 
 
