@@ -36,7 +36,7 @@ and the car will attempt to drive on its own
 
 ### Physical TODOs
 
--[ ] get new camera with no exposure bug
+- [ ] get new camera with no exposure bug
 
 
 ### Software TODOs
