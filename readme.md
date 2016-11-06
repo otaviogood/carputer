@@ -1,8 +1,8 @@
 
-carputer
+# Carputer
 
 
-*recording pipeline*
+## Recording pipline
 
 0. activate the virtualenv: `source /path/to/venv/bin/activate`
 0. run a script to drive and record training data: `python main_car.py record` --
@@ -10,7 +10,7 @@ this will let you have manual control over the car
 and save out recordings when you flip the switch
 
 
-*run autonomously*
+## Run autonomously
 
 0. activate the virtualenv: `source /path/to/venv/bin/activate`
 0. run a script to let tensorflow drive: `python main_car.py tf` --
@@ -20,25 +20,26 @@ and the car will attempt to drive on its own
 0. to revive autonomous mode, hit the channel 3 button (near the trigger)
 
 
-*training pipeline*
+## Training pipline
 
 0. convert images to np arrays: `python NeuralNet/filemash.py /path/to/data`
 0. train a model: `python NeuralNet/convnet02.py`
 0. use this model to drive the car (see above)
 
 
-*analysis tools*
+## Analysis
 
 * for training info, see `debug.html` -- reminder: < 7 is right, > 7 is left
 * run `analysis/make_video.py` for debug videos
 * use `analysis/plot_vs_time.py` to view telemetry data
 
 
-*phy todos*
+### Physical TODOs
 
-* get new camera with no exposure bug
+-[ ] get new camera with no exposure bug
 
 
-*sw todos*
+### Software TODOs
 
-* make images 320 x 240
+- [x] make images 320 x 240
+- [ ] throttle linear remap (in branch split_softmax)
