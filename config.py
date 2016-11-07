@@ -2,6 +2,8 @@
 # This file to contain all the config variables shared across modules
 
 use_median_filter_throttle = True
+use_throttle_manual_map = True
+
 #camera_id = 0
 
 

@@ -128,7 +128,11 @@ if __name__ == '__main__':
             last_millis = millis
 
         throttle = int(float(s_ahead[3]))
-        log_throttle = manual_throttle_map.to_throttle_buckets(throttle) #do_log_mapping_to_buckets(throttle - 90)
+        if config.use_throttle_manual_map:
+            log_throttle = manual_throttle_map.to_throttle_buckets(throttle)
+        else:
+            log_throttle = do_log_mapping_to_buckets(throttle - 90)
+        
         steer = int(float(s_ahead[5]))
         log_steer = do_log_mapping_to_buckets(steer - 90)
 
@@ -152,7 +156,7 @@ if __name__ == '__main__':
 
     if config.use_median_filter_throttle:
         import numpy as np
-        
+
         def medfilt (x, k):
             """Apply a length-k median filter to a 1D array x.
             Boundaries are extended by repeating endpoints.
