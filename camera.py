@@ -8,7 +8,7 @@ import cv2
 
 
 class CameraStream(object):
-  def __init__(self, src=1):
+  def __init__(self, src=0):
     self.stream = cv2.VideoCapture(src)
     if not self.stream.isOpened():
       src = 1 - src

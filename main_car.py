@@ -179,7 +179,8 @@ if True:
 	# tempfile = "/Users/otaviogood/sfe-models/first-run-0937.ckpt"
 	#tempfile = "/Users/otaviogood/sfe-models/golden/turning-bias-cleaned-data-0654.ckpt"
 	# tempfile = "/Users/otaviogood/sfe-models/last-model-1213.ckpt"
-	tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
+	# tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
+	tempfile = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt"
 	print "loading model: " + tempfile
 	saver.restore(sess, tempfile)
 

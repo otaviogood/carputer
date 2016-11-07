@@ -7,13 +7,13 @@ import cv2
 
 
 # cap = cv2.VideoCapture(0)
-
+camera_index = 1
 def test_cam():
     #capture from camera at location 0
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(camera_index)
     # Change the camera setting using the set() function
-    cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 160)
-    cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 120)
+    cap.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 320)
+    cap.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
     # cap.set(cv2.cv.CV_CAP_PROP_FPS, 60)
     # cap.set(cv2.cv.CV_CAP_PROP_EXPOSURE, -6.0)
     # cap.set(cv2.cv.CV_CAP_PROP_GAIN, 4.0)
@@ -63,7 +63,7 @@ def test_cam():
             break
 
     cv2.destroyAllWindows()
-    cv2.VideoCapture(1).release()
+    cv2.VideoCapture(camera_index).release()
 
 test_cam()
 
