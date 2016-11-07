@@ -34,12 +34,15 @@ and the car will attempt to drive on its own
 * use `analysis/plot_vs_time.py` to view telemetry data
 
 
-### Physical TODOs
+### Hardware TODOs
 
 - [ ] get new camera with no exposure bug
+- [ ] securely mount camera to car
+- [ ] front bumper
+- [ ] Roll cage
 
 
 ### Software TODOs
 
 - [x] make images 320 x 240
-- [ ] throttle linear remap (in branch split_softmax)
+- [x] throttle linear remap (in branch split_softmax)
