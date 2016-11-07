@@ -37,7 +37,7 @@ and the car will attempt to drive on its own
 ### Hardware TODOs
 
 - [ ] get new camera with no exposure bug
-- [ ] securely mount camera to car
+- [x] securely mount camera to car
 - [ ] front bumper
 - [ ] Roll cage
 
