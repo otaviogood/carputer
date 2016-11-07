@@ -1,5 +1,8 @@
 import tensorflow as tf
 import numpy as np
+import sys,os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import config
 
 def weight_variable(shape, name=None):
     # return tf.Variable(tf.random_normal(shape, stddev=0.01))
@@ -120,9 +123,14 @@ def gen_graph_ops():
     W_fc4 = weight_variable([fc3_num_outs, num_outputs], fc3_num_outs, num_outputs, name='W_fc4')
     b_fc4 = bias_variable([num_outputs])
 
-    output = (tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
-    steering = tf.nn.softmax(output[:, :max_log_outs])
-    throttle = tf.nn.softmax(output[:, max_log_outs:])
+    if config.split_softmax:
+        output = (tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
+        steering = tf.nn.softmax(output[:, :max_log_outs])
+        throttle = tf.nn.softmax(output[:, max_log_outs:])
+    else:
+        output = tf.nn.softmax(tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
+        steering = output[:, :max_log_outs]
+        throttle = output[:, max_log_outs:]
 
     # cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
     # http://stackoverflow.com/questions/33712178/tensorflow-nan-bug

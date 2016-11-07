@@ -23,6 +23,9 @@ from PIL import Image
 import cv2
 import Warp
 import numpy as np
+
+import sys,os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import manual_throttle_map
 import config
 
@@ -132,7 +135,7 @@ if __name__ == '__main__':
             log_throttle = manual_throttle_map.to_throttle_buckets(throttle)
         else:
             log_throttle = do_log_mapping_to_buckets(throttle - 90)
-        
+
         steer = int(float(s_ahead[5]))
         log_steer = do_log_mapping_to_buckets(steer - 90)
 
