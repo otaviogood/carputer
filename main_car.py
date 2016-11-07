@@ -181,8 +181,13 @@ if True:
 	#tempfile = "/Users/otaviogood/sfe-models/golden/turning-bias-cleaned-data-0654.ckpt"
 	# tempfile = "/Users/otaviogood/sfe-models/last-model-1213.ckpt"
 	# tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
-	tempfile = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt"
-	print "loading model: " + tempfile
+	try:
+		tempfile = config.tf_checkpoint_file #try to load the hardcoded config file path
+		print "loading model from config: " + tempfile
+	except:
+		tempfile = config.load('last_tf_model') #gets the cached last tf trained model
+		print "loading latest trained model: " + tempfile
+
 	saver.restore(sess, tempfile)
 
 	def do_tensor_flow(frame, odo_relative_to_start, speed):
@@ -276,6 +281,7 @@ def main():
 					session_full_path = make_data_folder('~/training-images')
 					print 'STARTING TO RECORD.'
 					print 'Folder: %s' % session_full_path
+					config.store('last_record_dir', session_full_path)
 				elif we_are_recording and we_are_autonomous:
 					session_full_path = make_data_folder('~/tf-driving-images')
 					print 'DRIVING AUTONOMOUSLY and STARTING TO RECORD'

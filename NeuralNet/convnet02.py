@@ -175,6 +175,7 @@ while iteration < 100000:
 
         # Save the model.
         save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
+        config.store('last_tf_model', save_path)
         # put the print after writing everything so it indicates things have been written.
         print 'iteration, test accuracy, test throttle accuracy: %5.0f   %3.3f   %3.3f' % (iteration, acc, throttle_acc)
 

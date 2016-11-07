@@ -1,7 +1,7 @@
 """Turns folders of training data into np arrays.
 
 Usage:
-  filemash.py <folders>... [--outdir=<path>]
+  filemash.py [<folders>...] [--outdir=<path>]
 
 Options:
   --outdir=<path>  where to save output npy files [default: ~/training-data]
@@ -80,6 +80,10 @@ if __name__ == '__main__':
     # Load all pngs and find filenames.
     allPNGs = []
     allLidars = []
+
+    if len(all_folders) == 0:
+        all_folders = [config.load('last_record_dir')]
+
     for folder in all_folders:
         filepaths = [os.path.join(folder, f) for f in os.listdir(folder)]
         filepaths = filter(lambda name: 'lidar' not in os.path.basename(name), filepaths)
