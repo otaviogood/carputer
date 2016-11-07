@@ -41,7 +41,7 @@ elif args['tf']:
 
 
 # Set up camera and key watcher.
-camera_stream = camera.CameraStream().start()
+camera_stream = camera.CameraStream(src=config.camera_id).start()
 last_key = ['']
 key_watcher.KeyWatcher(last_key).start()
 
