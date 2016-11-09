@@ -38,8 +38,8 @@ and the car will attempt to drive on its own
 
 - [ ] get new camera with no exposure bug
 - [x] securely mount camera to car
-- [ ] front bumper
-- [ ] Roll cage
+- [x] front bumper
+- [x] Roll cage
 
 
 ### Software TODOs
