@@ -172,7 +172,7 @@ def invert_log_bucket(a):
 
 # TOGGLE THIS TO RUN TENSORFLOW
 if True:
-	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy = convshared.gen_graph_ops()
+	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax = convshared.gen_graph_ops()
 	sess = tf.Session()
 	# Add ops to save and restore all the variables.
 	saver = tf.train.Saver()

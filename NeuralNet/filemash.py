@@ -20,7 +20,6 @@ from StringIO import StringIO
 from docopt import docopt
 import numpy as np
 from PIL import Image
-import cv2
 import Warp
 import numpy as np
 
@@ -58,14 +57,6 @@ def ReadPNG(source, targetWidth, targetHeight, warp):
     return ret
 
 
-def read_lidar(filename):
-    lidar_img = cv2.imread(filename, cv2.CV_LOAD_IMAGE_GRAYSCALE)
-    lidar_img = np.squeeze(lidar_img).astype(np.float32)
-    lidar_img /= 255.
-    assert lidar_img.shape == (256,)
-       
-    return lidar_img
-
 # http://www.iquilezles.org/apps/graphtoy/
 # round((log(abs(x)+1))/(log(2))*(x)/(abs(x)))
 
@@ -76,10 +67,10 @@ def do_log_mapping_to_buckets(a):
 probability_drop = 0.3
 
 if __name__ == '__main__':
+    np.random.seed(1)
     look_ahead = 3
     # Load all pngs and find filenames.
     allPNGs = []
-    allLidars = []
 
     if len(all_folders) == 0:
         all_folders = [config.load('last_record_dir')]
@@ -93,15 +84,13 @@ if __name__ == '__main__':
         # Cut off 2 seconds from the start and end and append to main list.
         allPNGs.extend(sorted(filepaths)[60:-60])
 
-        print str(len(allPNGs)) +  "    " + str(len(allLidars))
-        #assert len(allPNGs) == len(allLidars)
+        print str(len(allPNGs))
 
     allNames = [name[name.find("frame_"):] for name in allPNGs]
 
     all_odos = []
     all_vels = []
     all_formatted_pngs = []
-    all_lidars = []
     all_groundtruth_steer = []
     all_groundtruth_throttle = []
     last_odo = 0
@@ -146,12 +135,12 @@ if __name__ == '__main__':
         # generate x times more training data than we actually have. Each image
         # will be randomly mangled.
         iters = 1
-        if i >= len(allNames) - numTestImages - look_ahead:
+        test_image_zone = (i >= len(allNames) - numTestImages - look_ahead)
+        if test_image_zone:
             iters = 1
         for j in xrange(iters):
             # only warp training data, not test.
-            png = ReadPNG(allPNGs[i], 128, 128, i < len(
-                allNames) - numTestImages - look_ahead)
+            png = ReadPNG(allPNGs[i], 128, 128, not test_image_zone)
             all_formatted_pngs.append(png.flatten())
             all_vels.append(vel * 10.0)  # arbitrary range units. hurray!
             all_odos.append((temp_odo - last_reset) / 1000.0)

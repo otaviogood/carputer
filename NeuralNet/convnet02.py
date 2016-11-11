@@ -31,7 +31,7 @@ import config
 args = docopt(__doc__)
 # Save data to an output dir.
 outdir = os.path.expanduser(args['--outdir'])
-output_path = os.path.join(outdir, time.strftime('%Y_%m_%d__%I_%M_%S_%p'))
+output_path = os.path.join(outdir, time.strftime('%Y_%m_%d__%H_%M_%S_%p'))
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
@@ -64,7 +64,8 @@ for i in xrange(len(odoArray)):
 print "done odometer."
 
 numTest = 384*2
-skipTest = 8
+skipTest = 1
+if config.running_on_laptop: skipTest = 8
 testImages = bigArray[-numTest::skipTest]
 testGT = gtSoftArray[-numTest::skipTest]
 testGTThrottles = gtSoftThrottlesArray[-numTest::skipTest]
@@ -121,6 +122,9 @@ print '-----------------------\n'
 random.seed(111)
 iteration = 0
 accuracy_check_iterations = []
+sliding_window = []
+sliding_window_size = 16
+sliding_window_graph = []
 while iteration < 100000:
     randIndexes = random.sample(xrange(len(trainingGT)), min(64, len(trainingGT)))
     batch_xs = [trainingImages[index] for index in randIndexes]
@@ -140,19 +144,22 @@ while iteration < 100000:
     sess.run(train_step, feed_dict=train_feed_dict)
 
     # Check the accuracy occasionally.
-    if ((iteration % 64) == 63) or (iteration < 4):
+    if ((iteration % 256) == 255) or (iteration < 4):
         accuracy_check_iterations.append(iteration)
         allAccuracyTrain.append(sess.run(steering_accuracy, feed_dict=train_feed_dict))
 
         # odosTest = np.zeros((len(all_xs), 1)).astype(np.float32)
         acc = sess.run(steering_accuracy, feed_dict=test_feed_dict)
         allAccuracyTest.append(acc)
+        sliding_window.append(acc)
+        if len(sliding_window) > sliding_window_size: sliding_window = sliding_window[1:]
+        sliding_window_graph.append(sum(sliding_window)/len(sliding_window))
         throttle_acc = sess.run(throttle_accuracy, feed_dict=test_feed_dict)
 
         results = sess.run(steering_pred, feed_dict=test_feed_dict)
         results_throttle = sess.run(throttle_pred, feed_dict=test_feed_dict)
-        print results
-        print results_throttle
+        # print results
+        # print results_throttle
         html_output.write_html(
             output_path, results, results_throttle, all_xs, all_ys, all_ys_throttles,
             all_odos, convshared.width, convshared.height, tf.get_default_graph(),
@@ -162,13 +169,14 @@ while iteration < 100000:
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
         plt.plot(accuracy_check_iterations, allAccuracyTest, 'ro')
         plt.plot(accuracy_check_iterations, allAccuracyTest, 'r-')
+        plt.plot(accuracy_check_iterations, sliding_window_graph, 'g-')
         # if len(allAccuracyTrain) < 100:
         #     plt.xlim([0, 100])
         # else:
         #     plt.xlim([0, len(allAccuracyTrain)])
         axes = plt.gca()
         axes.set_ylim([0, 1.05])
-        plt.title("training (blue), test (red)")
+        plt.title("training (blue), test (red), avg " + str(round(sliding_window_graph[-1], 5)) + "  /  " + str(len(sliding_window)))
         plt.xlabel('iteration')
         plt.ylabel('accuracy')
         plt.savefig(os.path.join(output_path, "progress.png"))
@@ -177,7 +185,7 @@ while iteration < 100000:
         save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
         config.store('last_tf_model', save_path)
         # put the print after writing everything so it indicates things have been written.
-        print 'iteration, test accuracy, test throttle accuracy: %5.0f   %3.3f   %3.3f' % (iteration, acc, throttle_acc)
+        print 'iteration, test accuracy, test throttle accuracy, sliding avg: %5.0f   %3.3f   %3.3f   %3.3f' % (iteration, acc, throttle_acc, sliding_window_graph[-1])
 
     # Increment.
     iteration += 1

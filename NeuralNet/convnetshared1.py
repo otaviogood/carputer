@@ -40,13 +40,9 @@ widthD8 = width / 8
 heightD8 = height / 8
 widthD16 = width / 16
 heightD16 = height / 16
-widthD32 = width / 32
-heightD32 = height / 32
 max_log_outs = 15
 img_channels = 3
 fc1_num_outs = 256 # 256
-fc2_num_outs = 128 # 256
-fc3_num_outs = 128 # 256
 l1_conv_size = 3
 l1_num_convs = 4   #16
 l2_conv_size = 3
@@ -55,8 +51,6 @@ l3_conv_size = 3
 l3_num_convs = 16   #64
 l4_conv_size = 3
 l4_num_convs = 32  #128
-l5_conv_size = 3
-l5_num_convs = 64  #128
 
 numPulses = 128
 pulseScale = 16.0
@@ -94,76 +88,62 @@ def gen_graph_ops():
     h_conv4 = tf.nn.relu(conv2d(h_pool3, W_conv4) + b_conv4)
     h_pool4 = max_pool_2x2(h_conv4)
 
-    # W_conv5 = weight_variable([l5_conv_size, l5_conv_size, l4_num_convs, l5_num_convs], l5_conv_size * l5_conv_size * l4_num_convs, l5_conv_size * l5_conv_size * l5_num_convs, name='W_conv5')
-    # b_conv5 = bias_variable([l5_num_convs])
-    # h_conv5 = tf.nn.relu(conv2d(h_pool4, W_conv5) + b_conv5)
-    # h_pool5 = max_pool_2x2(h_conv5)
-
     keep_prob = tf.placeholder("float")
 
     W_fc1 = weight_variable([widthD16 * heightD16 * l4_num_convs + 2 + numPulses, fc1_num_outs], widthD16 * heightD16 * l4_num_convs + 2 + numPulses, fc1_num_outs, name='W_fc1')
     b_fc1 = bias_variable([fc1_num_outs])
     h_pool5_flat = tf.reshape(h_pool4, [-1, widthD16 * heightD16 * l4_num_convs])
-    h_pool5_odo_concat = tf.concat(1, [h_pool5_flat, odo*0.0, vel, pulse])
+    h_pool5_odo_concat = tf.concat(1, [h_pool5_flat, odo*0.0, vel, pulse*config.use_odometer])
 
     h_fc1 = tf.nn.relu(tf.matmul(h_pool5_odo_concat, W_fc1) + b_fc1)
     h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
 
-    W_fc2 = weight_variable([fc1_num_outs, fc2_num_outs], fc1_num_outs, fc2_num_outs, name='W_fc2')
-    b_fc2 = bias_variable([fc2_num_outs])
-    h_fc2 = tf.nn.relu(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
-    h_fc2_drop = tf.nn.dropout(h_fc2, keep_prob)
-
-    W_fc3 = weight_variable([fc2_num_outs, fc3_num_outs], fc2_num_outs, fc3_num_outs, name='W_fc3')
-    b_fc3 = bias_variable([fc3_num_outs])
-    h_fc3 = tf.nn.relu(tf.matmul(h_fc2_drop, W_fc3) + b_fc3)
-    h_fc3_drop = tf.nn.dropout(h_fc3, keep_prob)
-
     num_outputs = 2 * max_log_outs
-    W_fc4 = weight_variable([fc3_num_outs, num_outputs], fc3_num_outs, num_outputs, name='W_fc4')
+    W_fc4 = weight_variable([fc1_num_outs, num_outputs], fc1_num_outs, num_outputs, name='W_fc4')
     b_fc4 = bias_variable([num_outputs])
 
     if config.split_softmax:
-        output = (tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
-        steering = tf.nn.softmax(output[:, :max_log_outs])
-        throttle = tf.nn.softmax(output[:, max_log_outs:])
+        output = (tf.matmul(h_fc1_drop, W_fc4) + b_fc4)
+        steering_softmax = tf.nn.softmax(output[:, :max_log_outs])
+        throttle_softmax = tf.nn.softmax(output[:, max_log_outs:])
     else:
-        output = tf.nn.softmax(tf.matmul(h_fc3_drop, W_fc4) + b_fc4)
-        steering = output[:, :max_log_outs]
-        throttle = output[:, max_log_outs:]
+        output = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc4) + b_fc4)
+        steering_softmax = output[:, :max_log_outs]
+        throttle_softmax = output[:, max_log_outs:]
 
     # cross_entropy = -tf.reduce_sum(y_*tf.log(y_conv))
     # http://stackoverflow.com/questions/33712178/tensorflow-nan-bug
 
-    steering_cross_entropy = -tf.reduce_sum(steering_ * tf.log(tf.clip_by_value(steering, 1e-10, 1.0)))
-    throttle_cross_entropy = -tf.reduce_sum(throttle_ * tf.log(tf.clip_by_value(throttle, 1e-10, 1.0)))
+    steering_cross_entropy = -tf.reduce_mean(steering_ * tf.log(tf.clip_by_value(steering_softmax, 1e-10, 1.0)))
+    throttle_cross_entropy = -tf.reduce_mean(throttle_ * tf.log(tf.clip_by_value(throttle_softmax, 1e-10, 1.0)))
     cross_entropy = (steering_cross_entropy + throttle_cross_entropy) / 2.
     # L2 regularization
     regularizers = (tf.nn.l2_loss(W_conv1) + tf.nn.l2_loss(b_conv1) +
                     tf.nn.l2_loss(W_conv2) + tf.nn.l2_loss(b_conv2) +
                     tf.nn.l2_loss(W_conv3) + tf.nn.l2_loss(b_conv3) +
                     tf.nn.l2_loss(W_conv4) + tf.nn.l2_loss(b_conv4) +
-                    # tf.nn.l2_loss(W_conv5) + tf.nn.l2_loss(b_conv5) +
                     tf.nn.l2_loss(W_fc1) + tf.nn.l2_loss(b_fc1) +
-                    tf.nn.l2_loss(W_fc2) + tf.nn.l2_loss(b_fc2) +
-                    tf.nn.l2_loss(W_fc3) + tf.nn.l2_loss(b_fc3) +
                     tf.nn.l2_loss(W_fc4) + tf.nn.l2_loss(b_fc4)
                     )
     # Add the regularization term to the loss.
-    cross_entropy += 0.1 * regularizers # 5e-4
+    cross_entropy += 0.00005 * regularizers # 5e-4
     train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy) # 1e-4
     # train_step = tf.train.GradientDescentOptimizer(0.00001).minimize(cross_entropy) # for 3-conv 0.000001
     # train_step = tf.train.AdagradOptimizer(0.0002).minimize(cross_entropy) # for 3-conv 0.001
     # train_step = tf.train.MomentumOptimizer(0.00001, 0.9).minimize(cross_entropy)
 
+    # THIS NOW DOES A SUM OF SQUARES, NOT AN EXACT MATCH.
     def compute_pred_accuracy(output, label):
         prediction = tf.argmax(output, 1)
-        correctly_predicted = tf.equal(tf.argmax(label, 1), prediction)
-        accuracy = tf.reduce_mean(tf.cast(correctly_predicted, "float"))
+        delta = (prediction - tf.argmax(label, 1))
+        energy = delta * delta
+        accuracy = tf.reduce_mean(tf.cast(energy, "float")) * 0.1  # arbitrary scale
+        # correctly_predicted = tf.equal(tf.argmax(label, 1), prediction)
+        # accuracy = tf.reduce_mean(tf.cast(correctly_predicted, "float"))
 
         return prediction, accuracy
 
-    steering_pred, steering_accuracy = compute_pred_accuracy(steering, steering_)
-    throttle_pred, throttle_accuracy = compute_pred_accuracy(throttle, throttle_)
+    steering_pred, steering_accuracy = compute_pred_accuracy(steering_softmax, steering_)
+    throttle_pred, throttle_accuracy = compute_pred_accuracy(throttle_softmax, throttle_)
 
     return x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy

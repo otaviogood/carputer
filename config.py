@@ -3,7 +3,11 @@
 
 use_throttle_manual_map = True
 use_median_filter_throttle = False
-split_softmax = False
+split_softmax = True
+# floating point 0 or 1 to multiply against odo value
+use_odometer = 0.0
+# The laptop has very little GPU memory, so we have to scale down to run on it.
+running_on_laptop = True
 
 camera_id = 0
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.

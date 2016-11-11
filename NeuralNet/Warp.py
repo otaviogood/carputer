@@ -37,15 +37,16 @@ def Transform(source):
     return target
 
 def RandRects(source):
+    # Draw random rectangles over the image so we don't overfit to one feature.
     w = source.width
     h = source.height
     draw = ImageDraw.Draw(source)
-    for i in xrange(12):
+    for i in xrange(6):
         rs = np.random.rand(4)
         rc = np.random.randn(3) * 0.3
         rc = np.clip(rc, -1.0, 1.0) * 127 + 127
         draw.rectangle([(rs[0]*1.4-0.2)*w, (rs[1]*1.4-0.2)*h, (rs[0]*1.4-0.2)*w + rs[2]*40, (rs[1]*1.4-0.2)*h + rs[3]*40], fill=(int(rc[0]), int(rc[1]), int(rc[2])))
-    draw.rectangle([0, 80, 128, 128], fill=(0, 32, 0))
+    # draw.rectangle([0, 80, 128, 128], fill=(0, 32, 0))
 
 
 def WhiteUnbalance(source):
@@ -60,6 +61,10 @@ def WhiteUnbalance(source):
     bmax = random.random()*max_channel_low_end + 1 - max_channel_low_end
     new_image = np.empty((source.height, source.width, 3), dtype=np.float32)
     image = np.multiply(np.array(source), 1/255.)
+
+    # Make exposure ocasionally brighter
+    image = np.clip(np.multiply(image, random.random()*0.3+1.0), 0.0, 1.0)
+
     new_image[:, :, 0] = np.add(np.multiply(image[:, :, 0], (rmax-rmin)), rmin)
     new_image[:, :, 1] = np.add(np.multiply(image[:, :, 1], (gmax-gmin)), gmin)
     new_image[:, :, 2] = np.add(np.multiply(image[:, :, 2], (bmax-bmin)), bmin)

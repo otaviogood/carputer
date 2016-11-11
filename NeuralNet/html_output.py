@@ -70,33 +70,38 @@ def write_html_image_tensor_gray(outfile, tensor, rgb, scale=1):
 def write_vertical_meter(outfile, x, total, col = 'rgb(255, 255, 0)'):
     outfile.write('<svg width = "8" height = "' + str(total*8) + '" style="background:#606060"><rect width = "7" height = "' + str(x*8)  + '" y = "' + str((total-x) * 8) + '" style = "fill:' + col + ';" /></svg>')
 
+def write_steering_line(outfile, x, col = 'rgb(255, 255, 0)', line_width = 3):
+    s = '<svg width="190" height="160" stroke-width="%s" style="position:absolute;top:0px;left:0px"><path d="M74 128 Q 74 84 %s 66" stroke="%s" fill="transparent"/></svg>' % (line_width, str(x + 74), col)
+    outfile.write(s)
 
-def write_html_image(outfile, result, result_throttle, images, answers, answers_throttle, w, h, message):
-    color = "style='background:#9f1010'"
-    if argmax(answers) == result:
-        color = "style='background:#a0ffa0'"
-    if (argmax(answers) == result - 1) or (argmax(answers) == result + 1):
-        color = "style='background:#dfaf10'"
-    if (argmax(answers) == result - 2) or (argmax(answers) == result + 2):
-        color = "style='background:#bf5f10'"
-    outfile.write('<td ' + color + '>')
+def write_html_image(outfile, result, result_throttle, images, answers, answers_throttle, w, h, message, im_id):
+    delta = abs(argmax(answers) - result)
+    # Fade color from green to yellow to red.
+    # (40, 88, 136, 184, 232, 280)
+    # (400,352,304, 256, 208, 160, 112, 64, 16)
+    shade = 'rgb(%s, %s, %s)' % (min(232, delta * 52 + 20), max(0, min(255-32, 448 - delta * 48)), min(80, delta * 80))
+    color = "style='background:%s;position:relative'" % (shade)
+    padded_id = str(im_id).zfill(5)
+    outfile.write('<td id="td' + padded_id + '" ' + color + '><span>')
     # tempImg = np.add(images, 0.5)
     # tempImg = np.multiply(tempImg, 255.0)
     tempImg = np.copy(images)
     b64 = Image.frombuffer('RGB', (w, h), tempImg.astype(np.int8), 'raw', 'RGB', 0, 1)
     # b64.save("testtest.png")
     b = io.BytesIO()
-    b64.save(b, 'PNG')
+    b64.save(b, 'JPEG')
     b64 = base64.b64encode(b.getvalue())
     outfile.write('<img src="data:image/png;base64,')
     outfile.write(b64)
-    outfile.write('" alt="testImage.png">')
+    outfile.write('" alt="testImage.jpg">')
     total = convshared.max_log_outs
     throttle_net = result_throttle
     throttle_gt = argmax(answers_throttle)
-    # outfile.write('<svg width = "10" height = "' + str(total*8) + '" style="background:#606060"><rect width = "10" height = "' + str(throttle_gt*8)  + '" y = "' + str((total-throttle_gt) * 8) + '" style = "fill:rgb(255,255,0);" /></svg>' + str(throttle_gt))
-    # write_vertical_meter(outfile, throttle_gt, total, 'rgb(40, 255, 40)')
-    # write_vertical_meter(outfile, throttle_net, total)
+    write_steering_line(outfile, -(argmax(answers) - 7) * 7, 'rgb(40, 255, 40)', 5)
+    write_steering_line(outfile, -(result - 7) * 7)
+    write_vertical_meter(outfile, throttle_gt, total, 'rgb(40, 255, 40)')
+    write_vertical_meter(outfile, throttle_net, total)
+    outfile.write('</span><br/>')
     for i in range(argmax(answers_throttle)):
         outfile.write('T')
     outfile.write('&nbsp;&nbsp;' + str(argmax(answers_throttle)) + '<br/>')
@@ -127,9 +132,9 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
     <!--    <link rel="stylesheet" href="style.css">
         <script src="script.js"></script>-->
       </head>
-      <body>
+      <body onload="myMove()">
         <!-- page content -->
-        <table style="background: #333;font-family: monospace;">
+        <table id="mainTable" onclick="tableClick()" style="background: #333;font-family: monospace;">
                   """)
     outfile.write('<tr>')
 
@@ -145,12 +150,14 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
         if (i % 16) == 0:
             outfile.write('</tr>')
             outfile.write('<tr>')
-        write_html_image(outfile, results[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0))
+        write_html_image(outfile, results[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0), i)
     outfile.write('</tr>')
     outfile.write('</table>')
+    outfile.write("<div style='position:relative'>")
     write_html_image(
         outfile, results[0], results_throttle[0], testImages[0], answers[0],
-        answers_throttles[0], w, h, str(odos[0][0]*1000.0))
+        answers_throttles[0], w, h, str(odos[0][0]*1000.0), 0)
+    outfile.write('</div>')
     # write_html_image_RGB(outfile, all_xs[0], width, height)
     # viz = sess.run(W)
     # write_html_image_RGB(outfile, viz, width, height)
@@ -196,7 +203,68 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
     # write_html_image_tensor_gray(outfile, results, False, 8)
     outfile.write("""
         WRITTEN!!!!
+
+      <script>
+        var button = document.createElement("input");
+        button.type = "button";
+        button.value = "Animate";
+        button.addEventListener ("click", tableClick);
+        document.body.insertBefore(button, document.getElementById("mainTable"));
+
+        var animating = false;
+        var pos = 0;
+        var elemCount = NUM_IMAGES;
+        var timerID = 0;
+        function pad(num, size) {
+          var s = "000000000" + num;
+          return s.substr(s.length-size);
+        }
+        function myMove() {
+          if (timerID == 0) {
+            timerID = setInterval(frame, 200);
+          }
+          function frame() {
+            if (!animating) {
+              return;
+            }
+            if (pos == elemCount * 4) {
+              clearInterval(timerID);
+              timerID = 0;
+            } else {
+              pos++;
+              var modA = pos % elemCount
+              var modB = (pos + 1) % elemCount
+              //console.log(" " + pos + "   td" + pad(modA, 5) + "    " + "td" + pad(modB, 5));
+              var elem = document.getElementById("td" + pad(modA, 5));
+              elem.style.display = "none";
+              elem = document.getElementById("td" + pad(modB, 5));
+              elem.style.display = "table-cell";
+            }
+          }
+        }
+        function tableClick() {
+          if (animating) {
+            animating = !animating;
+            clearInterval(timerID);
+            timerID = 0;
+            pos = 0;
+            for (i = 0; i < elemCount; i++) {
+              elem = document.getElementById("td" + pad(i, 5));
+              elem.style.display = "table-cell";
+            }
+          } else {
+            pos = 0;
+            for (i = 0; i < elemCount; i++) {
+              elem = document.getElementById("td" + pad(i, 5));
+              elem.style.display = "none";
+            }
+            animating = !animating;
+            myMove();
+          }
+        }
+      </script>
+
       </body>
     </html>
-                  """)
+                  """.replace("NUM_IMAGES", str(len(results))))
     outfile.close()
