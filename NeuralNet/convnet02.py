@@ -41,7 +41,12 @@ class bcolors:
     UNDERLINE = '\033[4m'
 
 def generate_color_text(prev_val, cur_val):
-    
+    """
+        Pretty formats and colorizes an input based on the delta from the previous.
+        Used for debug statements
+
+        return string
+    """
     delta = cur_val - prev_val
     if(delta >= 0):
         return (bcolors.OKGREEN + format(cur_val, ".3f") + bcolors.ENDC)
@@ -221,18 +226,22 @@ while iteration < 100000:
         # put the print after writing everything so it indicates things have been written.
         debug_iteration = format(iteration, '^10')
 
+        #Format accuracy
         debug_acc = generate_color_text(prev_acc, acc)
         debug_acc = format(debug_acc, '^24')
         prev_acc = acc
 
+        #Format throttle accuracy
         debug_throttle_acc = generate_color_text(prev_throttle_acc, throttle_acc)
         debug_throttle_acc = format(debug_throttle_acc, '^33')
         prev_throttle_acc = throttle_acc
 
+        #Format sliding window 
         debug_sliding_window = generate_color_text(prev_sliding_window, sliding_window_graph[-1])
         debug_sliding_window = format(debug_sliding_window, '^25')
         prev_sliding_window = sliding_window_graph[-1]
 
+        #Print everything
         print("%s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window))
 
     # Increment.
