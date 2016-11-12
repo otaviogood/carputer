@@ -27,6 +27,32 @@ import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import config
 
+#Colorfied print statements
+#USAGE: print bcolors.WARNING + "TEXT" + bcolors.ENDC
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def generate_color_text(prev_val, cur_val):
+    """
+        Pretty formats and colorizes an input based on the delta from the previous.
+        Used for debug statements
+
+        return string
+    """
+    delta = cur_val - prev_val
+    if(delta >= 0):
+        return (bcolors.OKGREEN + format(cur_val, ".3f") + bcolors.ENDC)
+    else:
+        return (bcolors.FAIL + format(cur_val, ".3f") + bcolors.ENDC) 
+
+
 # Parse args.
 args = docopt(__doc__)
 # Save data to an output dir.
@@ -125,6 +151,17 @@ accuracy_check_iterations = []
 sliding_window = []
 sliding_window_size = 16
 sliding_window_graph = []
+
+#Headers for the console debug output
+debug_header_list = ['Iteration', 'Test Accuracy', 'Test Throttle Accuracy', 'Sliding Average']
+print '%s' % ' | '.join(map(str, debug_header_list))
+
+#Vars to calculate deltas between iterations
+prev_acc = 0
+prev_throttle_acc = 0
+prev_sliding_window = 0
+
+
 while iteration < 100000:
     randIndexes = random.sample(xrange(len(trainingGT)), min(64, len(trainingGT)))
     batch_xs = [trainingImages[index] for index in randIndexes]
@@ -184,8 +221,27 @@ while iteration < 100000:
         # Save the model.
         save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
         config.store('last_tf_model', save_path)
+
         # put the print after writing everything so it indicates things have been written.
-        print 'iteration, test accuracy, test throttle accuracy, sliding avg: %5.0f   %3.3f   %3.3f   %3.3f' % (iteration, acc, throttle_acc, sliding_window_graph[-1])
+        debug_iteration = format(iteration, '^10')
+
+        #Format accuracy
+        debug_acc = generate_color_text(prev_acc, acc)
+        debug_acc = format(debug_acc, '^24')
+        prev_acc = acc
+
+        #Format throttle accuracy
+        debug_throttle_acc = generate_color_text(prev_throttle_acc, throttle_acc)
+        debug_throttle_acc = format(debug_throttle_acc, '^33')
+        prev_throttle_acc = throttle_acc
+
+        #Format sliding window 
+        debug_sliding_window = generate_color_text(prev_sliding_window, sliding_window_graph[-1])
+        debug_sliding_window = format(debug_sliding_window, '^25')
+        prev_sliding_window = sliding_window_graph[-1]
+
+        #Print everything
+        print("%s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window))
 
     # Increment.
     iteration += 1
