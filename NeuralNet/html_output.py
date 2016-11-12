@@ -120,7 +120,7 @@ def write_html_image(outfile, result, result_throttle, images, answers, answers_
     outfile.write('</td>')
 
 
-def write_html(output_path, results, results_throttle, images, answers, answers_throttles, odos, w, h, graph, testImages, sess, test_feed_dict):
+def write_html(output_path, results_steering, results_throttle, images, answers, answers_throttles, odos, w, h, graph, testImages, sess, test_feed_dict):
     # images = [x for (y,x) in sorted(zip(results,images), key=lambda pair: pair[0])]
     outfile = open(os.path.join(output_path, "debug.html"), "w")
     outfile.write("""
@@ -146,16 +146,16 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
         if var.name:
             name_to_var[var.name] = var
 
-    for i in xrange(len(results)):
+    for i in xrange(len(results_steering)):
         if (i % 16) == 0:
             outfile.write('</tr>')
             outfile.write('<tr>')
-        write_html_image(outfile, results[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0), i)
+        write_html_image(outfile, results_steering[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0), i)
     outfile.write('</tr>')
     outfile.write('</table>')
     outfile.write("<div style='position:relative'>")
     write_html_image(
-        outfile, results[0], results_throttle[0], testImages[0], answers[0],
+        outfile, results_steering[0], results_throttle[0], testImages[0], answers[0],
         answers_throttles[0], w, h, str(odos[0][0]*1000.0), 0)
     outfile.write('</div>')
     # write_html_image_RGB(outfile, all_xs[0], width, height)
@@ -179,8 +179,8 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
     # write_html_image_tensor_gray(outfile, results, False)
     # results = sess.run(name_to_var['W_fc3:0'])
     # write_html_image_tensor_gray(outfile, results, False)
-    results = sess.run(convshared.h_pool5_odo_concat, feed_dict=test_feed_dict)
-    write_html_image_tensor_gray(outfile, results, False)
+    # results = sess.run(convshared.h_pool5_odo_concat, feed_dict=test_feed_dict)
+    # write_html_image_tensor_gray(outfile, results, False)
 
     # results = sess.run(h_pool1, feed_dict={x: all_xs[0:1], y_: all_ys[0:1], keep_prob: 1.0})
     # # results = results.transpose(0,3,1,2)
@@ -266,5 +266,5 @@ def write_html(output_path, results, results_throttle, images, answers, answers_
 
       </body>
     </html>
-                  """.replace("NUM_IMAGES", str(len(results))))
+                  """.replace("NUM_IMAGES", str(len(results_steering))))
     outfile.close()

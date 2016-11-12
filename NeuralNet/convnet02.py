@@ -78,20 +78,21 @@ for i in xrange(len(gtThrottlesArray)):
     gtVal = gtThrottlesArray[i]
     gtSoftThrottlesArray[i, gtVal] = 1.0
 pulseArray = np.zeros((len(gtArray), convshared.numPulses), dtype=np.float32)
-print "setting up odometer. slow."
-for i in xrange(len(odoArray)):
-    # pulses = np.zeros((numPulses), dtype=np.float64)
-    current_odo = odoArray[i]*1000.0 / convshared.pulseScale  # scale it so the whole track is in range.
-    assert(current_odo < convshared.numPulses)
-    for x in xrange(convshared.numPulses):
-        # http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
-        pulseArray[i, x] = max(0.0, 1 - abs(current_odo - x))
-        # pulseArray[i, 0] = 1.0 * (i % 2)
-print "done odometer."
+if config.use_odometer != 0.0:
+    print "setting up odometer. slow."
+    for i in xrange(len(odoArray)):
+        current_odo = odoArray[i]*1000.0 / convshared.pulseScale  # scale it so the whole track is in range.
+        assert(current_odo < convshared.numPulses)
+        for x in xrange(convshared.numPulses):
+            # http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
+            pulseArray[i, x] = max(0.0, 1 - abs(current_odo - x))
+    print "done odometer."
 
-numTest = 384*2
-skipTest = 1
-if config.running_on_laptop: skipTest = 8
+numTest = 4000
+skipTest = 2
+if config.running_on_laptop:
+    numTest = 384 * 2
+    skipTest = 8
 testImages = bigArray[-numTest::skipTest]
 testGT = gtSoftArray[-numTest::skipTest]
 testGTThrottles = gtSoftThrottlesArray[-numTest::skipTest]
@@ -193,12 +194,12 @@ while iteration < 100000:
         sliding_window_graph.append(sum(sliding_window)/len(sliding_window))
         throttle_acc = sess.run(throttle_accuracy, feed_dict=test_feed_dict)
 
-        results = sess.run(steering_pred, feed_dict=test_feed_dict)
+        results_steering = sess.run(steering_pred, feed_dict=test_feed_dict)
         results_throttle = sess.run(throttle_pred, feed_dict=test_feed_dict)
         # print results
         # print results_throttle
         html_output.write_html(
-            output_path, results, results_throttle, all_xs, all_ys, all_ys_throttles,
+            output_path, results_steering, results_throttle, all_xs, all_ys, all_ys_throttles,
             all_odos, convshared.width, convshared.height, tf.get_default_graph(),
             testImages, sess, test_feed_dict)
 
