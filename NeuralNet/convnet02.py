@@ -22,7 +22,6 @@ import tensorflow as tf
 
 import convnetshared1 as convshared
 import html_output
-import pandas
 
 import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
