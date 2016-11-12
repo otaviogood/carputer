@@ -151,8 +151,6 @@ if __name__ == '__main__':
             print s[1] + "    " + str(steer) + "    " + str(log_steer) + "    " + str(log_throttle)
 
     if config.use_median_filter_throttle:
-        import numpy as np
-
         def medfilt (x, k):
             """Apply a length-k median filter to a 1D array x.
             Boundaries are extended by repeating endpoints.
@@ -170,7 +168,7 @@ if __name__ == '__main__':
                 y[-j:,-(i+1)] = x[-1]
             return np.median (y, axis=1)
 
-        all_groundtruth_throttle = medfilt(all_groundtruth_throttle, 5)
+        all_groundtruth_throttle = medfilt(np.array(all_groundtruth_throttle), 5)
 
     # Save data.
     outpath = os.path.expanduser(args['--outdir'])
