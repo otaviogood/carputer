@@ -149,6 +149,17 @@ if __name__ == '__main__':
 
             all_groundtruth_steer.append(log_steer)
             all_groundtruth_throttle.append(log_throttle)
+
+            if config.do_flip_augmentation:
+                log_steer = do_log_mapping_to_buckets(-steer - 90)
+
+                all_formatted_pngs.append(png[::-1,:,:].flatten())
+                all_vels.append(vel * 10.0)  # arbitrary range units. hurray!
+                all_odos.append((temp_odo - last_reset) / 1000.0)
+                all_groundtruth_steer.append(log_steer)
+                all_groundtruth_throttle.append(log_throttle)
+
+
         if ((int(s[1]) % 1024) == 1023):
             print s[1] + "    " + str(steer) + "    " + str(log_steer) + "    " + str(log_throttle)
 
@@ -185,5 +196,5 @@ if __name__ == '__main__':
     )
     for d in data:
         np.save(os.path.join(outpath, d[0]), d[1])
-    print 'processed %s images' % len(allNames)
+    print 'processed %s images (%d outputs)' % len(allNames),len(all_formatted_pngs)
     print 'data saved to %s' % outpath
