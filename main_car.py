@@ -140,7 +140,10 @@ def process_input(port_in, port_out):
 
 def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Adjust the steering and throttle.
-	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 110)
+	if throttle < 0: # kill switch
+		throttle = 0
+	else:
+		throttle = 90 if 88 <= throttle <= 92 else min(throttle, 110)
 	# Update steering
 	if old_steering != steering:
 		port_out.write(('S%d\n' % steering).encode('ascii'))
@@ -356,7 +359,7 @@ def main():
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.
-			throttle, steering = 0, 90
+			throttle, steering = -1, 90 # kill switch
 
 		# Send output data to arduinos.
 		process_output(old_steering, old_throttle, steering, throttle, port_out)

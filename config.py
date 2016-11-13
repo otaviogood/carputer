@@ -8,7 +8,7 @@ split_softmax = True
 use_odometer = 0.0
 # The laptop has very little GPU memory, so we have to scale down to run on it.
 running_on_laptop = True
-do_flip_augmentation = False
+do_flip_augmentation = True
 
 camera_id = 0
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.
