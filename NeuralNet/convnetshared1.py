@@ -146,4 +146,4 @@ def gen_graph_ops():
     steering_pred, steering_accuracy = compute_pred_accuracy(steering_softmax, steering_)
     throttle_pred, throttle_accuracy = compute_pred_accuracy(throttle_softmax, throttle_)
 
-    return x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy
+    return x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax

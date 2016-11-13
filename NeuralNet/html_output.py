@@ -8,7 +8,7 @@ import io
 import os
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 import tensorflow as tf
 
 import convnetshared1 as convshared
@@ -71,56 +71,82 @@ def write_vertical_meter(outfile, x, total, col = 'rgb(255, 255, 0)'):
     outfile.write('<svg width = "8" height = "' + str(total*8) + '" style="background:#606060"><rect width = "7" height = "' + str(x*8)  + '" y = "' + str((total-x) * 8) + '" style = "fill:' + col + ';" /></svg>')
 
 def write_steering_line(outfile, x, col = 'rgb(255, 255, 0)', line_width = 3):
-    s = '<svg width="190" height="160" stroke-width="%s" style="position:absolute;top:0px;left:0px"><path d="M74 128 Q 74 84 %s 66" stroke="%s" fill="transparent"/></svg>' % (line_width, str(x + 74), col)
+    s = '<svg width="190" height="160" stroke-width="%s" style="position:absolute;top:0px;left:0px"><path d="M64 128 Q 64 84 %s 66" stroke="%s" fill="transparent"/></svg>' % (line_width, str(x + 64), col)
     outfile.write(s)
 
-def write_html_image(outfile, result, result_throttle, images, answers, answers_throttle, w, h, message, im_id):
-    delta = abs(argmax(answers) - result)
-    # Fade color from green to yellow to red.
+def encode_image_as_html(outfile, img, filetype='JPEG', attrib =''):
+    # img.save("testtest.png")
+    b = io.BytesIO()
+    img.save(b, filetype)
+    img = base64.b64encode(b.getvalue())
+    outfile.write('<img ' + attrib + ' src="data:image/png;base64,')
+    outfile.write(img)
+    outfile.write('">')
+
+def write_html_image(outfile, result_steering, result_throttle, images, answers, answers_throttle, w, h, message, im_id, steering_softmax, throttle_softmax):
+    steering_gt = argmax(answers)
+    throttle_gt = argmax(answers_throttle)
+
+    # Fade color from green to yellow to red and make a table cell with that background color.
     # (40, 88, 136, 184, 232, 280)
     # (400,352,304, 256, 208, 160, 112, 64, 16)
+    delta = abs(steering_gt - result_steering)
     shade = 'rgb(%s, %s, %s)' % (min(232, delta * 52 + 20), max(0, min(255-32, 448 - delta * 48)), min(80, delta * 80))
-    color = "style='background:%s;position:relative'" % (shade)
+    color = "style='background:%s;position:relative;padding:2px;border:2px solid black;'" % (shade)
     padded_id = str(im_id).zfill(5)
     outfile.write('<td id="td' + padded_id + '" ' + color + '><span>')
+
+    # Save out camera image as embedded .png and draw steering direction curves on the image.
     # tempImg = np.add(images, 0.5)
     # tempImg = np.multiply(tempImg, 255.0)
     tempImg = np.copy(images)
     b64 = Image.frombuffer('RGB', (w, h), tempImg.astype(np.int8), 'raw', 'RGB', 0, 1)
-    # b64.save("testtest.png")
-    b = io.BytesIO()
-    b64.save(b, 'JPEG')
-    b64 = base64.b64encode(b.getvalue())
-    outfile.write('<img src="data:image/png;base64,')
-    outfile.write(b64)
-    outfile.write('" alt="testImage.jpg">')
-    total = convshared.max_log_outs
-    throttle_net = result_throttle
-    throttle_gt = argmax(answers_throttle)
-    write_steering_line(outfile, -(argmax(answers) - 7) * 7, 'rgb(40, 255, 40)', 5)
-    write_steering_line(outfile, -(result - 7) * 7)
-    write_vertical_meter(outfile, throttle_gt, total, 'rgb(40, 255, 40)')
-    write_vertical_meter(outfile, throttle_net, total)
+    encode_image_as_html(outfile, b64)
+    write_steering_line(outfile, -(steering_gt - 7) * 7, 'rgb(40, 255, 40)', 5)
+    write_steering_line(outfile, -(result_steering - 7) * 7)
+    # write_vertical_meter(outfile, throttle_gt, total, 'rgb(40, 255, 40)')
+    # write_vertical_meter(outfile, throttle_net, total)
     outfile.write('</span><br/>')
-    for i in range(argmax(answers_throttle)):
-        outfile.write('T')
-    outfile.write('&nbsp;&nbsp;' + str(argmax(answers_throttle)) + '<br/>')
-    for i in range(result_throttle):
-        outfile.write('N')
-    outfile.write('<br/>')
 
-    for i in range(argmax(answers)):
-        outfile.write('*')
-    outfile.write('&nbsp;&nbsp;' + str(argmax(answers)) + '<br/>')
-    for i in range(result):
-        outfile.write('N')
-    outfile.write('&nbsp;&nbsp;' + str(result))
-    outfile.write('<br/>')
+    # Draw *steering* softmax distribution to a png
+    soft_img = Image.new('RGBA', (128, 32), (0, 0, 0, 64))
+    draw = ImageDraw.Draw(soft_img)
+    soft_size = steering_softmax.shape[0]
+    scale = (soft_img.width / soft_size)
+    gt = steering_gt
+    for i in range(soft_size):
+        fill_color = (255, 255, 255, 255)
+        if i == (soft_size - gt - 1): fill_color = (0, 255, 0, 255)
+        prob = steering_softmax[soft_size - i - 1]
+        draw.rectangle([i * scale, soft_img.height - round(prob * soft_img.height), i * scale + scale - 2, soft_img.height], fill_color)
+    outfile.write('<div style="position:relative;padding-bottom:5px">')
+    encode_image_as_html(outfile, soft_img, 'PNG', 'style="position:absolute"')
+    outfile.write('Steer softmax</div><br/>')
+
+    # Draw *throttle* softmax distribution to a png
+    soft_img = Image.new('RGBA', (128, 32), (0, 0, 0, 64))
+    draw = ImageDraw.Draw(soft_img)
+    soft_size = throttle_softmax.shape[0]
+    scale = (soft_img.width / soft_size)
+    # draw rectangle to mark 0-speed mapping
+    draw.rectangle([5 * scale, soft_img.height / 2, 5 * scale + scale - 2, soft_img.height], (128, 128, 128, 48))
+    for i in range(soft_size):
+        fill_color = (255, 255, 255, 255)
+        if i == throttle_gt: fill_color = (0, 255, 0, 255)
+        prob = throttle_softmax[i]
+        draw.rectangle([i * scale, soft_img.height - round(prob * soft_img.height), i * scale + scale - 2, soft_img.height], fill_color)
+    outfile.write('<div style="position:relative;padding-bottom:4px">')
+    encode_image_as_html(outfile, soft_img, 'PNG', 'style="position:absolute"')
+    outfile.write('Throttle softmax</div><br/>')
+
+    # Print out throttle, steering, and odometer values.
+    outfile.write('T: ' + str(throttle_gt) + '&nbsp;&nbsp; NT: ' + str(result_throttle) + '<br/>')
+    outfile.write('S: ' + str(steering_gt) + '&nbsp;&nbsp; NS: ' + str(result_steering) + '<br/>')
     outfile.write(message)
     outfile.write('</td>')
 
 
-def write_html(output_path, results_steering, results_throttle, images, answers, answers_throttles, odos, w, h, graph, testImages, sess, test_feed_dict):
+def write_html(output_path, results_steering, results_throttle, images, answers, answers_throttles, odos, w, h, graph, testImages, sess, test_feed_dict, steering_softmax_batch, throttle_softmax_batch):
     # images = [x for (y,x) in sorted(zip(results,images), key=lambda pair: pair[0])]
     outfile = open(os.path.join(output_path, "debug.html"), "w")
     outfile.write("""
@@ -134,7 +160,7 @@ def write_html(output_path, results_steering, results_throttle, images, answers,
       </head>
       <body onload="myMove()">
         <!-- page content -->
-        <table id="mainTable" onclick="tableClick()" style="background: #333;font-family: monospace;">
+        <table id="mainTable" onclick="tableClick()" style="border-collapse:collapse;background: #333;font-family: monospace;">
                   """)
     outfile.write('<tr>')
 
@@ -146,17 +172,19 @@ def write_html(output_path, results_steering, results_throttle, images, answers,
         if var.name:
             name_to_var[var.name] = var
 
+    # Make a giant table of all images and info from the neural net.
     for i in xrange(len(results_steering)):
         if (i % 16) == 0:
             outfile.write('</tr>')
             outfile.write('<tr>')
-        write_html_image(outfile, results_steering[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0), i)
+        write_html_image(outfile, results_steering[i], results_throttle[i], images[i], answers[i], answers_throttles[i], w, h, str(odos[i][0]*1000.0), i, steering_softmax_batch[i], throttle_softmax_batch[i])
     outfile.write('</tr>')
-    outfile.write('</table>')
+    outfile.write('</table><br/><br/>')
+
     outfile.write("<div style='position:relative'>")
     write_html_image(
         outfile, results_steering[0], results_throttle[0], testImages[0], answers[0],
-        answers_throttles[0], w, h, str(odos[0][0]*1000.0), 0)
+        answers_throttles[0], w, h, str(odos[0][0]*1000.0), 0, steering_softmax_batch[0], throttle_softmax_batch[0])
     outfile.write('</div>')
     # write_html_image_RGB(outfile, all_xs[0], width, height)
     # viz = sess.run(W)

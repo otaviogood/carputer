@@ -109,7 +109,7 @@ trainingPulses = pulseArray[0:-numTest]
 # b164 = Image.frombuffer('RGB', (32, 32), bigArray[0].astype(np.int8), 'raw', 'RGB', 0, 1)
 # b164.save("testtestT.png")
 
-x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy = convshared.gen_graph_ops()
+x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax = convshared.gen_graph_ops()
 
 timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
 
@@ -154,7 +154,7 @@ sliding_window_size = 16
 sliding_window_graph = []
 
 #Headers for the console debug output
-debug_header_list = ['Iteration', 'Test Accuracy', 'Test Throttle Accuracy', 'Sliding Average']
+debug_header_list = ['Iteration', 'Test Accuracy', 'Test Throttle Accuracy', 'Sliding Average', 'Elapsed Time']
 print '%s' % ' | '.join(map(str, debug_header_list))
 
 #Vars to calculate deltas between iterations
@@ -162,7 +162,7 @@ prev_acc = 0
 prev_throttle_acc = 0
 prev_sliding_window = 0
 
-
+start_time = time.time()
 while iteration < 100000:
     randIndexes = random.sample(xrange(len(trainingGT)), min(64, len(trainingGT)))
     batch_xs = [trainingImages[index] for index in randIndexes]
@@ -196,12 +196,14 @@ while iteration < 100000:
 
         results_steering = sess.run(steering_pred, feed_dict=test_feed_dict)
         results_throttle = sess.run(throttle_pred, feed_dict=test_feed_dict)
+        results_steering_softmax = sess.run(steering_softmax, feed_dict=test_feed_dict)
+        results_throttle_softmax = sess.run(throttle_softmax, feed_dict=test_feed_dict)
         # print results
         # print results_throttle
         html_output.write_html(
             output_path, results_steering, results_throttle, all_xs, all_ys, all_ys_throttles,
             all_odos, convshared.width, convshared.height, tf.get_default_graph(),
-            testImages, sess, test_feed_dict)
+            testImages, sess, test_feed_dict, results_steering_softmax, results_throttle_softmax)
 
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
@@ -241,8 +243,11 @@ while iteration < 100000:
         debug_sliding_window = format(debug_sliding_window, '^25')
         prev_sliding_window = sliding_window_graph[-1]
 
+        elapsed_time = format(format(time.time() - start_time, ".2f"), '^17')
+
         #Print everything
-        print("%s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window))
+        print("%s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time))
+        start_time = time.time()
 
     # Increment.
     iteration += 1
