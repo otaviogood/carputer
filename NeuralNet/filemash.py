@@ -196,5 +196,5 @@ if __name__ == '__main__':
     )
     for d in data:
         np.save(os.path.join(outpath, d[0]), d[1])
-    print 'processed %s images (%d outputs)' % len(allNames),len(all_formatted_pngs)
+    print 'processed %s images (%d outputs)' % (len(allNames),len(all_formatted_pngs))
     print 'data saved to %s' % outpath
