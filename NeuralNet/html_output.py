@@ -129,7 +129,7 @@ def write_html_image(outfile, result_steering, result_throttle, images, answers,
     soft_size = throttle_softmax.shape[0]
     scale = (soft_img.width / soft_size)
     # draw rectangle to mark 0-speed mapping
-    draw.rectangle([5 * scale, soft_img.height / 2, 5 * scale + scale - 2, soft_img.height], (128, 128, 128, 48))
+    draw.rectangle([5 * scale, soft_img.height / 2, 5 * scale + scale - 2, soft_img.height], (16, 16, 32, 56))
     for i in range(soft_size):
         fill_color = (255, 255, 255, 255)
         if i == throttle_gt: fill_color = (0, 255, 0, 255)
