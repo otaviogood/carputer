@@ -75,7 +75,7 @@ for i in xrange(len(gtArray)):
     gtVal = gtArray[i]
     gtSoftArray[i, gtVal] = 1.0
 for i in xrange(len(gtThrottlesArray)):
-    gtVal = gtThrottlesArray[i]
+    gtVal = int(gtThrottlesArray[i])
     gtSoftThrottlesArray[i, gtVal] = 1.0
 pulseArray = np.zeros((len(gtArray), convshared.numPulses), dtype=np.float32)
 if config.use_odometer != 0.0:
@@ -179,25 +179,29 @@ while iteration < 100000:
     bpulses = np.array(batch_pulse)
     # odos = np.zeros((bxs.shape[0], 1)).astype(np.float32)
     train_feed_dict = {x: bxs, steering_: bys, throttle_:bys_t, keep_prob: 0.5, odo: bodos, vel:bvels, pulse:bpulses}
-    sess.run(train_step, feed_dict=train_feed_dict)
+    [_, train_acc] = sess.run([train_step, steering_accuracy], feed_dict=train_feed_dict)
 
     # Check the accuracy occasionally.
     if ((iteration % 256) == 255) or (iteration < 4):
         accuracy_check_iterations.append(iteration)
-        allAccuracyTrain.append(sess.run(steering_accuracy, feed_dict=train_feed_dict))
+        allAccuracyTrain.append(train_acc)  # WARNING: this is running with dropout - should rerun if we want accuracy.
 
-        # odosTest = np.zeros((len(all_xs), 1)).astype(np.float32)
-        acc = sess.run(steering_accuracy, feed_dict=test_feed_dict)
+        [acc,
+         throttle_acc,
+         results_steering,
+         results_throttle,
+         results_steering_softmax,
+         results_throttle_softmax] = sess.run([steering_accuracy,
+                                               throttle_accuracy,
+                                               steering_pred,
+                                               throttle_pred,
+                                               steering_softmax,
+                                               throttle_softmax], feed_dict=test_feed_dict)
         allAccuracyTest.append(acc)
         sliding_window.append(acc)
         if len(sliding_window) > sliding_window_size: sliding_window = sliding_window[1:]
         sliding_window_graph.append(sum(sliding_window)/len(sliding_window))
-        throttle_acc = sess.run(throttle_accuracy, feed_dict=test_feed_dict)
 
-        results_steering = sess.run(steering_pred, feed_dict=test_feed_dict)
-        results_throttle = sess.run(throttle_pred, feed_dict=test_feed_dict)
-        results_steering_softmax = sess.run(steering_softmax, feed_dict=test_feed_dict)
-        results_throttle_softmax = sess.run(throttle_softmax, feed_dict=test_feed_dict)
         # print results
         # print results_throttle
         html_output.write_html(
