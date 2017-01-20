@@ -119,21 +119,44 @@ timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 
-def plotNNFilter(units, layer_name):
-    filters = units.shape[3]
-    plt.figure(1, figsize=(160,120))
+def plotMultiFilter(units, layer_name):
+    total_filters = []
+    n_rows = 0
+    for unit in units:
+        sub_filters = unit.shape[3]
+        total_filters.append(sub_filters)
+        n_rows += sub_filters
+
+    plt.figure(num=None, figsize=(16, 12), dpi=80)
+    plt.title("Garbage Boy")
     n_columns = 6
-    n_rows = math.ceil(filters / n_columns) + 1
-    for i in range(filters):
-        plt.subplot(n_rows, n_columns, i+1)
-        plt.title('Filter ' + str(i))
-        plt.axis("off")
-        plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
-        layer_file_name = layer_name + ".png"
-        plt.savefig(os.path.join(output_path, "layer_activations", layer_file_name))
-def get_activations(layer, layer_name, stimuli):
-    units = sess.run(layer, feed_dict=stimuli)
-    plotNNFilter(units, layer_name)
+    n_rows = math.ceil((n_rows + len(total_filters))/ n_columns) + 1
+    
+    plot_index = 1
+    for i in range(0, len(total_filters)):
+        if i > 0:
+            # Split the layers visualized 
+            plot_index = plot_index + n_columns
+        for k in range(total_filters[i]):
+            if plot_index > (n_rows * n_columns):
+                plot_index = plot_index - 1
+            plt.subplot(n_rows, n_columns, plot_index)
+            plot_index = plot_index + 1
+            plt.axis("off")
+            plt.imshow(units[i][0,:,:,k], interpolation="nearest", cmap="gray")
+    layer_file_name = layer_name + ".png"
+    plt.savefig(os.path.join(output_path, "layer_activations", layer_file_name))
+
+def get_activations(layer, stimuli):
+    return sess.run(layer, feed_dict=stimuli)
+    
+def get_units(layers, layer_name, stimuli):
+    units = []
+    for l in range(0, len(layers)):
+        layer = layers[l]
+        unit = get_activations(layer, stimuli)
+        units.append(unit)
+    plotMultiFilter(units, layer_name)
 
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
@@ -277,11 +300,9 @@ while iteration < 100000:
 
         # Visualize layer acivations 
         if config.visualize_layer_activations:
-            # Pooling
-            for l in range(0, len(pooling_layers)):
-                layer = pooling_layers[l]
-                layer_name = "h_pool" + str(l) + "_" + str(iteration)
-                get_activations(layer, layer_name, train_feed_dict)
+            # do_activations(pooling_layers[0], train_feed_dict)
+            layer_name = "h_pool_" + str(iteration)
+            get_units(pooling_layers, layer_name, train_feed_dict)
         
 
     # Increment.

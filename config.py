@@ -7,7 +7,7 @@ split_softmax = True
 # floating point 0 or 1 to multiply against odo value
 use_odometer = 0.0
 # The laptop has very little GPU memory, so we have to scale down to run on it.
-running_on_laptop = True
+running_on_laptop = False
 do_flip_augmentation = False
 
 camera_id = 0
