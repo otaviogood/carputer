@@ -11,6 +11,10 @@ running_on_laptop = True
 do_flip_augmentation = False
 
 camera_id = 0
+
+# This currently increases train time
+visualize_layer_activations = True
+
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.
 # If no tf_checkpoint_file variable is found, the latest generated model is loaded.
 #tf_checkpoint_file = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt" 

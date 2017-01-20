@@ -28,8 +28,6 @@ def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
                           strides=[1, 2, 2, 1], padding='SAME')
 
-
-
 width = 128
 height = 128
 widthD2 = width / 2
@@ -146,4 +144,6 @@ def gen_graph_ops():
     steering_pred, steering_accuracy = compute_pred_accuracy(steering_softmax, steering_)
     throttle_pred, throttle_accuracy = compute_pred_accuracy(throttle_softmax, throttle_)
 
-    return x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, h_conv1
+    pooling_layers = [h_pool1, h_pool2, h_pool3, h_pool4]
+
+    return x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pooling_layers

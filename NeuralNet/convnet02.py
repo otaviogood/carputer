@@ -26,6 +26,7 @@ import html_output
 import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import config
+import math
 
 #Colorfied print statements
 #USAGE: print bcolors.WARNING + "TEXT" + bcolors.ENDC
@@ -60,6 +61,8 @@ outdir = os.path.expanduser(args['--outdir'])
 output_path = os.path.join(outdir, time.strftime('%Y_%m_%d__%H_%M_%S_%p'))
 if not os.path.exists(output_path):
     os.makedirs(output_path)
+    os.makedirs(os.path.join(output_path, "layer_activations"))
+
 
 
 # Load the filemashed data.
@@ -109,26 +112,28 @@ trainingPulses = pulseArray[0:-numTest]
 # b164 = Image.frombuffer('RGB', (32, 32), bigArray[0].astype(np.int8), 'raw', 'RGB', 0, 1)
 # b164.save("testtestT.png")
 
-x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, h_conv1 = convshared.gen_graph_ops()
+x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pooling_layers = convshared.gen_graph_ops()
 
 timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
 
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
 
-def plotNNFilter(units):
+def plotNNFilter(units, layer_name):
     filters = units.shape[3]
-    plt.figure(1, figsize=(20,20))
+    plt.figure(1, figsize=(160,120))
     n_columns = 6
     n_rows = math.ceil(filters / n_columns) + 1
     for i in range(filters):
         plt.subplot(n_rows, n_columns, i+1)
         plt.title('Filter ' + str(i))
+        plt.axis("off")
         plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
-
-def getActivations(layer, stimuli):
-    units = sess.run(layer, feed_dict={x:np.reshape(stimuli,[1,784],order='F'),keep_prob:1.0})
-    plotNNFilter(units)
+        layer_file_name = layer_name + ".png"
+        plt.savefig(os.path.join(output_path, "layer_activations", layer_file_name))
+def get_activations(layer, layer_name, stimuli):
+    units = sess.run(layer, feed_dict=stimuli)
+    plotNNFilter(units, layer_name)
 
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
@@ -225,6 +230,7 @@ while iteration < 100000:
             all_odos, convshared.width, convshared.height, tf.get_default_graph(),
             testImages, sess, test_feed_dict, results_steering_softmax, results_throttle_softmax)
 
+        plt.clf()
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
         plt.plot(accuracy_check_iterations, allAccuracyTest, 'ro')
@@ -269,8 +275,13 @@ while iteration < 100000:
         print("%s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time))
         start_time = time.time()
 
-        # Visualize
-        #getActivations(h_conv1, testImages[0])
+        # Visualize layer acivations 
+        if config.visualize_layer_activations:
+            # Pooling
+            for l in range(0, len(pooling_layers)):
+                layer = pooling_layers[l]
+                layer_name = "h_pool" + str(l) + "_" + str(iteration)
+                get_activations(layer, layer_name, train_feed_dict)
         
 
     # Increment.
