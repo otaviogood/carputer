@@ -46,3 +46,9 @@ and the car will attempt to drive on its own
 
 - [x] make images 320 x 240
 - [x] throttle linear remap (in branch split_softmax)
+
+### Visualizing Layer Activation (Work in progress)
+You can enable the flag `visualize_layer_activations` to visualize layer activations. Right now, I am only outputing activations for the pooling layers. They are written to a file in the convnet02-restults directory under `layer_activations`
+
+Here is an example of an output after ~5000 iterations:
+![alt-text](./analysis/h_pool_5375.png "Layer Visualization")
