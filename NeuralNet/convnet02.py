@@ -109,12 +109,26 @@ trainingPulses = pulseArray[0:-numTest]
 # b164 = Image.frombuffer('RGB', (32, 32), bigArray[0].astype(np.int8), 'raw', 'RGB', 0, 1)
 # b164.save("testtestT.png")
 
-x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax = convshared.gen_graph_ops()
+x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, h_conv1 = convshared.gen_graph_ops()
 
 timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
 
 sess = tf.Session()
 sess.run(tf.initialize_all_variables())
+
+def plotNNFilter(units):
+    filters = units.shape[3]
+    plt.figure(1, figsize=(20,20))
+    n_columns = 6
+    n_rows = math.ceil(filters / n_columns) + 1
+    for i in range(filters):
+        plt.subplot(n_rows, n_columns, i+1)
+        plt.title('Filter ' + str(i))
+        plt.imshow(units[0,:,:,i], interpolation="nearest", cmap="gray")
+
+def getActivations(layer, stimuli):
+    units = sess.run(layer, feed_dict={x:np.reshape(stimuli,[1,784],order='F'),keep_prob:1.0})
+    plotNNFilter(units)
 
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
@@ -180,6 +194,8 @@ while iteration < 100000:
     # odos = np.zeros((bxs.shape[0], 1)).astype(np.float32)
     train_feed_dict = {x: bxs, steering_: bys, throttle_:bys_t, keep_prob: 0.5, odo: bodos, vel:bvels, pulse:bpulses}
     [_, train_acc] = sess.run([train_step, steering_accuracy], feed_dict=train_feed_dict)
+
+    
 
     # Check the accuracy occasionally.
     if ((iteration % 256) == 255) or (iteration < 4):
@@ -252,6 +268,10 @@ while iteration < 100000:
         #Print everything
         print("%s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time))
         start_time = time.time()
+
+        # Visualize
+        #getActivations(h_conv1, testImages[0])
+        
 
     # Increment.
     iteration += 1
