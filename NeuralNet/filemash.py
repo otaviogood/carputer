@@ -32,7 +32,7 @@ import config
 args = docopt(__doc__)
 all_folders = args['<folders>']
 
-numTestImages = 4000
+numTestImages = 8000
 if config.running_on_laptop:
     numTestImages = 384 * 2
 

@@ -3,9 +3,8 @@
 
 use_throttle_manual_map = True
 use_median_filter_throttle = False
-split_softmax = True
 # floating point 0 or 1 to multiply against odo value
-use_odometer = 0.0
+use_odometer = 1.0
 # The laptop has very little GPU memory, so we have to scale down to run on it.
 running_on_laptop = True
 do_flip_augmentation = False

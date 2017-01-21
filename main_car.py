@@ -172,7 +172,7 @@ def invert_log_bucket(a):
 
 # TOGGLE THIS TO RUN TENSORFLOW
 if True:
-	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax = convshared.gen_graph_ops()
+	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
 	sess = tf.Session()
 	# Add ops to save and restore all the variables.
 	saver = tf.train.Saver()
@@ -205,7 +205,7 @@ if True:
 		for num in xrange(convshared.numPulses):
 			# http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
 			pulse_arr[0, num] = max(0.0, 1 - abs(current_odo - num))
-		steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr})  # run tensorflow
+		steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr, train_mode: 0.0})  # run tensorflow
 		steer = invert_log_bucket(steering_result[0])
 		if config.use_throttle_manual_map:
 			throt = manual_throttle_map.from_throttle_buckets(throttle_result[0])

@@ -82,14 +82,15 @@ if config.use_odometer != 0.0:
     print "setting up odometer. slow."
     for i in xrange(len(odoArray)):
         current_odo = odoArray[i]*1000.0 / convshared.pulseScale  # scale it so the whole track is in range.
-        assert(current_odo < convshared.numPulses)
+        # assert(current_odo < convshared.numPulses)
+        current_odo = min(current_odo, convshared.numPulses - 1)
         for x in xrange(convshared.numPulses):
             # http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
             pulseArray[i, x] = max(0.0, 1 - abs(current_odo - x))
     print "done odometer."
 
-numTest = 4000
-skipTest = 2
+numTest = 8000
+skipTest = 1
 if config.running_on_laptop:
     numTest = 384 * 2
     skipTest = 8
@@ -109,7 +110,7 @@ trainingPulses = pulseArray[0:-numTest]
 # b164 = Image.frombuffer('RGB', (32, 32), bigArray[0].astype(np.int8), 'raw', 'RGB', 0, 1)
 # b164.save("testtestT.png")
 
-x, odo, vel, pulse, steering_, throttle_, keep_prob, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax = convshared.gen_graph_ops()
+x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
 
 timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
 
@@ -133,6 +134,7 @@ test_feed_dict = {
     steering_: all_ys,
     throttle_: all_ys_throttles,
     keep_prob: 1.0,
+    train_mode: 0.0,
     odo: all_odos,
     vel: all_vels,
     pulse: all_pulses,
@@ -178,11 +180,13 @@ while iteration < 100000:
     bvels = np.array(batch_vel)[:, np.newaxis]
     bpulses = np.array(batch_pulse)
     # odos = np.zeros((bxs.shape[0], 1)).astype(np.float32)
-    train_feed_dict = {x: bxs, steering_: bys, throttle_:bys_t, keep_prob: 0.5, odo: bodos, vel:bvels, pulse:bpulses}
+    tm = 0.0
+    if (iteration > 1000): tm = 1.0
+    train_feed_dict = {x: bxs, steering_: bys, throttle_:bys_t, keep_prob: 0.5, train_mode: tm, odo: bodos, vel:bvels, pulse:bpulses}
     [_, train_acc] = sess.run([train_step, steering_accuracy], feed_dict=train_feed_dict)
 
     # Check the accuracy occasionally.
-    if ((iteration % 256) == 255) or (iteration < 4):
+    if ((iteration % 256) == 255): #or (iteration < 4):
         accuracy_check_iterations.append(iteration)
         allAccuracyTrain.append(train_acc)  # WARNING: this is running with dropout - should rerun if we want accuracy.
 
@@ -191,23 +195,33 @@ while iteration < 100000:
          results_steering,
          results_throttle,
          results_steering_softmax,
-         results_throttle_softmax] = sess.run([steering_accuracy,
+         results_throttle_softmax,
+         results_pulse_softmax,
+         results_conv_maxes] = sess.run([steering_accuracy,
                                                throttle_accuracy,
                                                steering_pred,
                                                throttle_pred,
                                                steering_softmax,
-                                               throttle_softmax], feed_dict=test_feed_dict)
+                                               throttle_softmax,
+                                               pulse_softmax,
+                                               conv_maxes], feed_dict=test_feed_dict)
         allAccuracyTest.append(acc)
         sliding_window.append(acc)
         if len(sliding_window) > sliding_window_size: sliding_window = sliding_window[1:]
         sliding_window_graph.append(sum(sliding_window)/len(sliding_window))
+
+        final_convs = sess.run(debug_layer, feed_dict=test_feed_dict)
+        final_convs = final_convs.transpose((3, 0, 1, 2))
+        results_conv_maxes = results_conv_maxes.transpose()
+        live_kernel = 0
+        max_set = set(np.argsort(-results_conv_maxes[live_kernel])[:16])
 
         # print results
         # print results_throttle
         html_output.write_html(
             output_path, results_steering, results_throttle, all_xs, all_ys, all_ys_throttles,
             all_odos, convshared.width, convshared.height, tf.get_default_graph(),
-            testImages, sess, test_feed_dict, results_steering_softmax, results_throttle_softmax)
+            testImages, sess, test_feed_dict, results_steering_softmax, results_throttle_softmax, results_pulse_softmax, final_convs)
 
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
@@ -249,8 +263,10 @@ while iteration < 100000:
 
         elapsed_time = format(format(time.time() - start_time, ".2f"), '^17')
 
+        all_pulse_entropy = np.sum(np.multiply(results_pulse_softmax, np.log(np.reciprocal(results_pulse_softmax))))
+
         #Print everything
-        print("%s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time))
+        print("%s %s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time, all_pulse_entropy))
         start_time = time.time()
 
     # Increment.
