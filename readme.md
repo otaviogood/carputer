@@ -22,7 +22,7 @@ and the car will attempt to drive on its own
 
 ## Training pipline
 
-0. convert images to np arrays: `python NeuralNet/filemash.py /path/to/data`
+0. convert images to np arrays: `python NeuralNet/filemash.py /path/to/data` (Can be multiple paths)
 0. train a model: `python NeuralNet/convnet02.py`
 0. use this model to drive the car (see above)
 
@@ -36,13 +36,12 @@ and the car will attempt to drive on its own
 
 ### Hardware TODOs
 
-- [ ] get new camera with no exposure bug
-- [x] securely mount camera to car
-- [x] front bumper
-- [x] Roll cage
+- [ ] Make the car drive slower. Smaller wheels? Smaller batteries?
 
 
 ### Software TODOs
 
-- [x] make images 320 x 240
-- [x] throttle linear remap (in branch split_softmax)
+- [ ] Debug crowded autonomous runs with lots of people standing around throwing off the neural net
+
+### Hardware setup
+![Wiring diagram](https://github.com/otaviogood/carputer/blob/master/CarDiagram.jpg "Wiring diagram")
