@@ -7,7 +7,7 @@ import cv2
 
 
 # cap = cv2.VideoCapture(0)
-camera_index = 1
+camera_index = 0
 def test_cam():
     #capture from camera at location 0
     cap = cv2.VideoCapture(camera_index)

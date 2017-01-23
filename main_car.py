@@ -183,13 +183,16 @@ if True:
 	# tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
 	try:
 		tempfile = config.tf_checkpoint_file #try to load the hardcoded config file path
-		print "loading model from config: " + tempfile
+		print "loading model from config: " + str(tempfile)
 	except:
 		tempfile = config.load('last_tf_model') #gets the cached last tf trained model
-		print "loading latest trained model: " + tempfile
+		print "loading latest trained model: " + str(tempfile)
 
-	saver.restore(sess, tempfile)
-
+	try:
+		saver.restore(sess, tempfile)
+	except:
+		print 'Cannot restore session'
+		
 	def do_tensor_flow(frame, odo_relative_to_start, speed):
 		# Take a camera frame as input, send it to the neural net, and get steering back.
 		resized = cv2.resize(frame, (128, 128))

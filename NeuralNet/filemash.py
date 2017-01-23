@@ -70,7 +70,7 @@ probability_drop = 0.3
 
 if __name__ == '__main__':
     np.random.seed(1)
-    look_ahead = 3
+    look_ahead = 0
     # Load all pngs and find filenames.
     allPNGs = []
 
