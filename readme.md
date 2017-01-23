@@ -43,6 +43,7 @@ and the car will attempt to drive on its own
 
 - [ ] Debug crowded autonomous runs with lots of people standing around throwing off the neural net
 - [ ] Fix the kill switch so it locks brakes instead of coasting. Just a logic bug I think.
+- [ ] Look into remote SSH type software so we don't have to keep popping open the car.
 
 ### Hardware setup
 Updates - We no longer use the IMUs and we're no longer trying to run the NVidia TX1 computer. Macbook works better.
