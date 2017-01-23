@@ -44,4 +44,5 @@ and the car will attempt to drive on its own
 - [ ] Debug crowded autonomous runs with lots of people standing around throwing off the neural net
 
 ### Hardware setup
+Updates - We no longer use the IMUs and we're no longer trying to run the NVidia TX1 computer. Macbook works better.
 ![Wiring diagram](https://github.com/otaviogood/carputer/blob/master/CarDiagram.jpg "Wiring diagram")
