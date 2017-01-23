@@ -10,6 +10,7 @@ import os
 import re
 import sys
 import time
+import subprocess
 
 import cv2
 from docopt import docopt
@@ -237,6 +238,16 @@ if False:
 		throttle = int(throttle[0][0] + 90)
 		return steering, throttle
 
+# This checks that we are running the program that allows us to close the lid of our mac and keep running.
+def CheckForInsomnia():
+	proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
+	(out, err) = proc.communicate()
+	# print "program output:", out
+	if not "Insomnia" in out:
+		print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
+		print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
+		print "How are you gonna drive a car if your driver is asleep?"
+		sys.exit(0)
 
 def main():
 	global last_odometer_reset
@@ -257,6 +268,8 @@ def main():
 	vel = 0.0
 	last_odo = 0
 	last_millis = 0.0
+
+	CheckForInsomnia()
 
 	# Setup ports.
 	port_in, port_out = setup_serial_and_reset_arduinos()
