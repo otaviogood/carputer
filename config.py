@@ -1,3 +1,4 @@
+import math
 
 # This file to contain all the config variables shared across modules
 
@@ -9,10 +10,21 @@ use_odometer = 1.0
 running_on_laptop = True
 do_flip_augmentation = False
 
+# Should tensorflow use the GPU
+should_use_gpu = 0
+
 camera_id = 0
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.
 # If no tf_checkpoint_file variable is found, the latest generated model is loaded.
 #tf_checkpoint_file = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt" 
+
+
+# http://www.iquilezles.org/apps/graphtoy/
+# round((log(abs(x)+1))/(log(2))*(x)/(abs(x)))
+
+def do_log_mapping_to_buckets(a):
+    return int(round(math.copysign(math.log(abs(a) + 1, 2.0), a))) + 7
+
 
 # JSON cache of local settings (path to latest training data folder, model checkpoint, ...)
 

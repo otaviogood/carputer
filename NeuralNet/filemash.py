@@ -1,10 +1,12 @@
 """Turns folders of training data into np arrays.
 
 Usage:
-  filemash.py [<folders>...] [--outdir=<path>]
+  filemash.py [<folders>...] [--outdir=<path>] [--gen_test] [--gen_gan]
 
 Options:
   --outdir=<path>  where to save output npy files [default: ~/training-data]
+  --gen_test  generate test instead of training data
+  --gen_gan  generate GAN data instead of training data
 
 Examples:
   python filemash.py /my/training/data ~/my/other/data
@@ -32,21 +34,19 @@ import config
 args = docopt(__doc__)
 all_folders = args['<folders>']
 
-numTestImages = 8000
-if config.running_on_laptop:
-    numTestImages = 384 * 2
-
 lamecount =0
-def ReadPNG(source, targetWidth, targetHeight, warp):
+def ReadPNG(source, targetWidth, targetHeight, train_or_test_or_gan):
     global lamecount
     try:
         pngfile = Image.open(source)
         pngfile = pngfile.resize((targetWidth, targetHeight), Image.BILINEAR)
         pngfile = pngfile.crop((0, 0, targetWidth, targetHeight))
+        # if (random.random() < 0.5):
+        #     pngfile = pngfile.filter(ImageFilter.GaussianBlur(radius=random.random()*5.0+1.5))
     except:
         print "failed to read file: " + source
         return None
-    if warp:
+    if train_or_test_or_gan != 1:
         Warp.RandRects(pngfile)
         pngfile = Warp.WhiteUnbalance(pngfile)
     # pngfile.save("test" + str(lamecount) + ".png")
@@ -58,57 +58,53 @@ def ReadPNG(source, targetWidth, targetHeight, warp):
     ret[:, :, 2] = pixRGB[:, :, 2]
     return ret
 
+def is_finite(x):
+    return not math.isnan(x) and not math.isinf(x)
 
-# http://www.iquilezles.org/apps/graphtoy/
-# round((log(abs(x)+1))/(log(2))*(x)/(abs(x)))
+def ParseGoodFloat(s):
+    try:
+        a = float(s)
+        if is_finite(a):
+            return float(a)
+        else:
+            return 0.0
+    except ValueError:
+        return 0.0
 
 
-def do_log_mapping_to_buckets(a):
-    return int(round(math.copysign(math.log(abs(a) + 1, 2.0), a))) + 7
-
-probability_drop = 0.3
-
-if __name__ == '__main__':
-    np.random.seed(1)
-    look_ahead = 0
-    # Load all pngs and find filenames.
-    allPNGs = []
-
-    if len(all_folders) == 0:
-        all_folders = [config.load('last_record_dir')]
-
-    for folder in all_folders:
-        filepaths = [os.path.join(folder, f) for f in os.listdir(folder)]
-        filepaths = filter(lambda name: 'lidar' not in os.path.basename(name), filepaths)
-
-        filepaths = filter(lambda name: ('ste_90' not in os.path.basename(name)) or np.random.binomial(1, probability_drop),
-                            filepaths)
-        # Cut off 2 seconds from the start and end and append to main list.
-        allPNGs.extend(sorted(filepaths)[60:-60])
-
-        print str(len(allPNGs))
+# True for training data generation, False for test data generation
+def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_medfilt=None):
 
     allNames = [name[name.find("frame_"):] for name in allPNGs]
 
+    processed_pngs = []
+    all_steering = []
+    all_throttle = []
     all_odos = []
     all_vels = []
-    all_formatted_pngs = []
-    all_groundtruth_steer = []
-    all_groundtruth_throttle = []
     last_odo = 0
     last_millis = 0
-    for i in xrange(len(allNames) - look_ahead):
+
+    for i in xrange(len(allNames)):
         name = allNames[i]
-        name_ahead = allNames[i + look_ahead]
         s = name.split("_")
-        s_ahead = name_ahead.split("_")
+
+        frame = ParseGoodFloat(s[1])
+
+        if i  == 0:
+            print name,s
+
+        if ((i % 1024) == 1023):
+            print s
+
+        # only warp training data, not test.
+        png = ReadPNG(allPNGs[i], 128, 128, train_or_test_or_gan)
+        processed_pngs.append(png.flatten())
+
+        all_steering.append(ParseGoodFloat(s[5]))
+        all_throttle.append(ParseGoodFloat(s[3]))
+
         temp_odo = int(s[9].split(".")[0])
-        last_reset = 0
-        # for j in odo_resets:
-        #     if j > temp_odo:
-        #         break
-        #     last_reset = j
-        # if last_reset == 0: continue
 
         # load odometer millisecond marks and convert to speed.
         millis = float(s[7])
@@ -125,76 +121,55 @@ if __name__ == '__main__':
             last_odo = temp_odo
             last_millis = millis
 
-        throttle = int(float(s_ahead[3]))
-        if config.use_throttle_manual_map:
-            log_throttle = manual_throttle_map.to_throttle_buckets(throttle)
-        else:
-            log_throttle = do_log_mapping_to_buckets(throttle - 90)
+        # if config.use_throttle_manual_map:
+        #     log_throttle = manual_throttle_map.to_throttle_buckets(throttle)
+        # else:
+        #     log_throttle = do_log_mapping_to_buckets(throttle - 90)
 
-        steer = int(float(s_ahead[5]))
-        log_steer = do_log_mapping_to_buckets(steer - 90)
+        # steer = int(float(s_ahead[5]))
+        # log_steer = do_log_mapping_to_buckets(steer - 90)
 
-        # generate x times more training data than we actually have. Each image
-        # will be randomly mangled.
-        iters = 1
-        test_image_zone = (i >= len(allNames) - numTestImages - look_ahead)
-        if test_image_zone:
-            iters = 1
-        for j in xrange(iters):
-            # only warp training data, not test.
-            png = ReadPNG(allPNGs[i], 128, 128, not test_image_zone)
-            all_formatted_pngs.append(png.flatten())
-            all_vels.append(vel * 10.0)  # arbitrary range units. hurray!
-            all_odos.append((temp_odo - last_reset) / 1000.0)
-
-            all_groundtruth_steer.append(log_steer)
-            all_groundtruth_throttle.append(log_throttle)
-
-            if config.do_flip_augmentation:
-                log_steer = do_log_mapping_to_buckets(-steer - 90)
-
-                all_formatted_pngs.append(png[::-1,:,:].flatten())
-                all_vels.append(vel * 10.0)  # arbitrary range units. hurray!
-                all_odos.append((temp_odo - last_reset) / 1000.0)
-                all_groundtruth_steer.append(log_steer)
-                all_groundtruth_throttle.append(log_throttle)
-
-
-        if ((int(s[1]) % 1024) == 1023):
-            print s[1] + "    " + str(steer) + "    " + str(log_steer) + "    " + str(log_throttle)
-
-    if config.use_median_filter_throttle:
-        def medfilt (x, k):
-            """Apply a length-k median filter to a 1D array x.
-            Boundaries are extended by repeating endpoints.
-            """
-            assert k % 2 == 1, "Median filter length must be odd."
-            assert x.ndim == 1, "Input must be one-dimensional."
-            k2 = (k - 1) // 2
-            y = np.zeros ((len (x), k), dtype=x.dtype)
-            y[:,k2] = x
-            for i in range (k2):
-                j = k2 - i
-                y[j:,i] = x[:-j]
-                y[:j,i] = x[0]
-                y[:-j,-(i+1)] = x[j:]
-                y[-j:,-(i+1)] = x[-1]
-            return np.median (y, axis=1)
-
-        all_groundtruth_throttle = medfilt(np.array(all_groundtruth_throttle), 5)
+        all_odos.append(temp_odo)
+        all_vels.append(vel)
 
     # Save data.
     outpath = os.path.expanduser(args['--outdir'])
     if not os.path.exists(outpath):
         os.makedirs(outpath)
-    data = (
-        ("picArray", np.array(all_formatted_pngs)),
-        ("gtArray", np.array(all_groundtruth_steer)),
-        ("gtThrottlesArray", np.array(all_groundtruth_throttle)),
-        ("odoArray", np.array(all_odos)),
-        ("velArray", np.array(all_vels)),
-    )
+    mode = ("train_", "test_", "gan_")[train_or_test_or_gan]
+
+    data = [
+        (mode + "pic_array", np.array(processed_pngs)),
+        (mode + "steer_array", np.array(all_steering)),
+        (mode + "throttle_array", np.array(all_throttle)),
+        (mode + "odo_array", np.array(all_odos)),
+        (mode + "vel_array", np.array(all_vels)),
+    ]
+
     for d in data:
         np.save(os.path.join(outpath, d[0]), d[1])
-    print 'processed %s images (%d outputs)' % (len(allNames),len(all_formatted_pngs))
+    print 'processed %s images (%d outputs)' % (len(allNames), len(processed_pngs))
     print 'data saved to %s' % outpath
+
+if __name__ == '__main__':
+    np.random.seed(1)
+
+    # Load all pngs and find filenames.
+    allPNGs = []
+
+    if len(all_folders) == 0:
+        all_folders = [config.load('last_record_dir')]
+
+    for folder in all_folders:
+        filepaths = [os.path.join(folder, f) for f in os.listdir(folder) if ('.png' in f.lower() or '.jpg' in f.lower()) and (f[0] != '.')]
+
+        allPNGs.extend(sorted(filepaths))
+
+        print str(len(filepaths))
+
+    train_or_test_or_gan = 0
+    if args['--gen_test']: train_or_test_or_gan = 1
+    elif args['--gen_gan']: train_or_test_or_gan = 2
+
+    print ("Generating TRAINING data.", "Generating TEST data", "Generating GAN data")[train_or_test_or_gan]
+    GenNumpyFiles(allPNGs, train_or_test_or_gan)
