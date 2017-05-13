@@ -9,6 +9,7 @@ Options:
 """
 
 import os
+import os.path
 import random
 import time
 
@@ -20,7 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
-import convnetshared1 as convshared
+from convnetshared1 import NNModel
+from data_model import TrainingData
 import html_output
 
 import sys,os
@@ -61,179 +63,111 @@ output_path = os.path.join(outdir, time.strftime('%Y_%m_%d__%H_%M_%S_%p'))
 if not os.path.exists(output_path):
     os.makedirs(output_path)
 
+# -------- Load all data --------
+train_data = TrainingData.fromfilename("train", args['--indir'])
+test_data = TrainingData.fromfilename("test", args['--indir'])
 
-# Load the filemashed data.
-inpath = os.path.expanduser(args['--indir'])
-bigArray         = np.load(inpath + "/picArray.npy")
-gtArray          = np.load(inpath + "/gtArray.npy")
-gtThrottlesArray = np.load(inpath + "/gtThrottlesArray.npy")
-odoArray         = np.load(inpath + "/odoArray.npy")
-velArray         = np.load(inpath + "/velArray.npy")
-gtSoftArray = np.zeros((len(gtArray), convshared.max_log_outs), dtype=np.float32)
-gtSoftThrottlesArray = np.zeros((len(gtThrottlesArray), convshared.max_log_outs), dtype=np.float32)
-for i in xrange(len(gtArray)):
-    gtVal = gtArray[i]
-    gtSoftArray[i, gtVal] = 1.0
-for i in xrange(len(gtThrottlesArray)):
-    gtVal = int(gtThrottlesArray[i])
-    gtSoftThrottlesArray[i, gtVal] = 1.0
-pulseArray = np.zeros((len(gtArray), convshared.numPulses), dtype=np.float32)
-if config.use_odometer != 0.0:
-    print "setting up odometer. slow."
-    for i in xrange(len(odoArray)):
-        current_odo = odoArray[i]*1000.0 / convshared.pulseScale  # scale it so the whole track is in range.
-        # assert(current_odo < convshared.numPulses)
-        current_odo = min(current_odo, convshared.numPulses - 1)
-        for x in xrange(convshared.numPulses):
-            # http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
-            pulseArray[i, x] = max(0.0, 1 - abs(current_odo - x))
-    print "done odometer."
-
-numTest = 8000
-skipTest = 1
+numTest = 2000
+skipTest = 4
 if config.running_on_laptop:
     numTest = 384 * 2
     skipTest = 8
-testImages = bigArray[-numTest::skipTest]
-testGT = gtSoftArray[-numTest::skipTest]
-testGTThrottles = gtSoftThrottlesArray[-numTest::skipTest]
-testOdo = odoArray[-numTest::skipTest][:, np.newaxis]
-testVel = velArray[-numTest::skipTest][:, np.newaxis]
-testPulses = pulseArray[-numTest::skipTest]
-trainingImages = bigArray[0:-numTest]
-trainingGT = gtSoftArray[0:-numTest]
-trainingGTThrottles = gtSoftThrottlesArray[0:-numTest]
-trainingOdo = odoArray[0:-numTest]
-trainingVel = velArray[0:-numTest]
-trainingPulses = pulseArray[0:-numTest]
+test_data.TrimArray(numTest, skipTest)
 
-# b164 = Image.frombuffer('RGB', (32, 32), bigArray[0].astype(np.int8), 'raw', 'RGB', 0, 1)
-# b164.save("testtestT.png")
-
-x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
+net_model = NNModel()
 
 timeStamp = time.strftime("%Y_%m_%d__%H_%M_%S")
-
-sess = tf.Session()
-sess.run(tf.initialize_all_variables())
 
 # Add ops to save and restore all the variables.
 saver = tf.train.Saver()
 
+sess = tf.Session()
+sess.run(tf.global_variables_initializer())
+
 # saver.restore(sess, "modelMed.ckpt")
-
-all_xs = [image for image in testImages]
-all_ys = [gt for gt in testGT]
-all_ys_throttles = [gtt for gtt in testGTThrottles]
-all_odos = testOdo
-all_vels = testVel
-all_pulses = testPulses
-
-test_feed_dict = {
-    x: all_xs,
-    steering_: all_ys,
-    throttle_: all_ys_throttles,
-    keep_prob: 1.0,
-    train_mode: 0.0,
-    odo: all_odos,
-    vel: all_vels,
-    pulse: all_pulses,
-}
 
 allAccuracyTrain = []
 allAccuracyTest = []
 
 print '\n\n-----------------------'
 print 'saving output data to %s' % output_path
-print 'training on %s images' % len(trainingGT)
+print 'training on %s images' % train_data.NumSamples()
 print '-----------------------\n'
 
 random.seed(111)
 iteration = 0
 accuracy_check_iterations = []
 sliding_window = []
-sliding_window_size = 16
+sliding_window_size = 64
 sliding_window_graph = []
 
 #Headers for the console debug output
-debug_header_list = ['Iteration', 'Test Accuracy', 'Test Throttle Accuracy', 'Sliding Average', 'Elapsed Time']
+debug_header_list = ['Iteration', 'Test Accuracy', 'Test Throttle Accuracy', 'Sliding Average', 'Elapsed Time', 'steer regression']
 print '%s' % ' | '.join(map(str, debug_header_list))
 
 #Vars to calculate deltas between iterations
 prev_acc = 0
 prev_throttle_acc = 0
 prev_sliding_window = 0
+prev_squared_diff = 0.0
+
+merged_summaries = tf.summary.merge_all()
+train_writer = tf.summary.FileWriter('train', sess.graph)
 
 start_time = time.time()
-while iteration < 100000:
-    randIndexes = random.sample(xrange(len(trainingGT)), min(64, len(trainingGT)))
-    batch_xs = [trainingImages[index] for index in randIndexes]
-    batch_ys = [trainingGT[index] for index in randIndexes]
-    batch_ys_t = [trainingGTThrottles[index] for index in randIndexes]
-    batch_odo = [trainingOdo[index] for index in randIndexes]
-    batch_vel = [trainingVel[index] for index in randIndexes]
-    batch_pulse = [trainingPulses[index] for index in randIndexes]
-    bxs = np.array(batch_xs)
-    bys = np.array(batch_ys)
-    bys_t = np.array(batch_ys_t)
-    bodos = np.array(batch_odo)[:, np.newaxis]
-    bvels = np.array(batch_vel)[:, np.newaxis]
-    bpulses = np.array(batch_pulse)
-    # odos = np.zeros((bxs.shape[0], 1)).astype(np.float32)
-    tm = 0.0
-    if (iteration > 1000): tm = 1.0
-    train_feed_dict = {x: bxs, steering_: bys, throttle_:bys_t, keep_prob: 0.5, train_mode: tm, odo: bodos, vel:bvels, pulse:bpulses}
-    [_, train_acc] = sess.run([train_step, steering_accuracy], feed_dict=train_feed_dict)
+while iteration < 100*128:
+    batch = train_data.GenRandomBatch()
+    train_feed_dict = batch.FeedDict(net_model, 0.6)
+    # [summary_str, _, train_steer_acc] = sess.run(
+    #     [merged_summaries, net_model.train_step, net_model.steering_accuracy], feed_dict=train_feed_dict)
+    [summary_str, _, train_steer_acc, squared_diff] = sess.run(
+        [merged_summaries, net_model.train_step, net_model.steering_accuracy, net_model.squared_diff], feed_dict = train_feed_dict)
+    train_writer.add_summary(summary_str, iteration)
+
 
     # Check the accuracy occasionally.
-    if ((iteration % 256) == 255): #or (iteration < 4):
-        accuracy_check_iterations.append(iteration)
-        allAccuracyTrain.append(train_acc)  # WARNING: this is running with dropout - should rerun if we want accuracy.
-
+    if ((iteration % 64) == 63):
         [acc,
          throttle_acc,
          results_steering,
          results_throttle,
          results_steering_softmax,
          results_throttle_softmax,
-         results_pulse_softmax,
-         results_conv_maxes] = sess.run([steering_accuracy,
-                                               throttle_accuracy,
-                                               steering_pred,
-                                               throttle_pred,
-                                               steering_softmax,
-                                               throttle_softmax,
-                                               pulse_softmax,
-                                               conv_maxes], feed_dict=test_feed_dict)
+         results_steering_regress,
+         results_throttle_regress,
+         results_squared_diff,
+         ] = sess.run([net_model.steering_accuracy,
+                       net_model.throttle_accuracy,
+                       net_model.steering_pred,
+                       net_model.throttle_pred,
+                       net_model.steering_softmax,
+                       net_model.throttle_softmax,
+                       net_model.steering_regress_result,
+                       net_model.throttle_regress_result,
+                       net_model.squared_diff,
+                       ], feed_dict=test_data.FeedDict(net_model))
+
         allAccuracyTest.append(acc)
         sliding_window.append(acc)
         if len(sliding_window) > sliding_window_size: sliding_window = sliding_window[1:]
         sliding_window_graph.append(sum(sliding_window)/len(sliding_window))
 
-        final_convs = sess.run(debug_layer, feed_dict=test_feed_dict)
-        final_convs = final_convs.transpose((3, 0, 1, 2))
-        results_conv_maxes = results_conv_maxes.transpose()
-        live_kernel = 0
-        max_set = set(np.argsort(-results_conv_maxes[live_kernel])[:16])
-
-        # print results
+        # print results_steering
         # print results_throttle
         html_output.write_html(
-            output_path, results_steering, results_throttle, all_xs, all_ys, all_ys_throttles,
-            all_odos, convshared.width, convshared.height, tf.get_default_graph(),
-            testImages, sess, test_feed_dict, results_steering_softmax, results_throttle_softmax, results_pulse_softmax, final_convs)
+            output_path, test_data, results_steering, results_throttle, tf.get_default_graph(),
+            sess, results_steering_softmax, results_throttle_softmax, results_steering_regress, results_throttle_regress, net_model)
+
+        accuracy_check_iterations.append(iteration)
+        allAccuracyTrain.append(train_steer_acc)
 
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
         plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
         plt.plot(accuracy_check_iterations, allAccuracyTest, 'ro')
         plt.plot(accuracy_check_iterations, allAccuracyTest, 'r-')
         plt.plot(accuracy_check_iterations, sliding_window_graph, 'g-')
-        # if len(allAccuracyTrain) < 100:
-        #     plt.xlim([0, 100])
-        # else:
-        #     plt.xlim([0, len(allAccuracyTrain)])
         axes = plt.gca()
-        axes.set_ylim([0, 1.05])
+        axes.set_ylim([0, 30.05])
         plt.title("training (blue), test (red), avg " + str(round(sliding_window_graph[-1], 5)) + "  /  " + str(len(sliding_window)))
         plt.xlabel('iteration')
         plt.ylabel('accuracy')
@@ -261,12 +195,17 @@ while iteration < 100000:
         debug_sliding_window = format(debug_sliding_window, '^25')
         prev_sliding_window = sliding_window_graph[-1]
 
+        # Format steering regression accuracy
+        debug_sqr_acc = generate_color_text(prev_squared_diff, results_squared_diff)
+        debug_sqr_acc = format(debug_sqr_acc, '^33')
+        prev_squared_diff = results_squared_diff
+
         elapsed_time = format(format(time.time() - start_time, ".2f"), '^17')
 
-        all_pulse_entropy = np.sum(np.multiply(results_pulse_softmax, np.log(np.reciprocal(results_pulse_softmax))))
+        # all_pulse_entropy = np.sum(np.multiply(results_pulse_softmax, np.log(np.reciprocal(results_pulse_softmax))))
 
         #Print everything
-        print("%s %s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time, all_pulse_entropy))
+        print("%s %s %s %s %s %s" % (debug_iteration, debug_acc, debug_throttle_acc, debug_sliding_window, elapsed_time, debug_sqr_acc))
         start_time = time.time()
 
     # Increment.

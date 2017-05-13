@@ -15,16 +15,28 @@ import subprocess
 import cv2
 from docopt import docopt
 import numpy as np
+import platform
 import serial
 import tensorflow as tf
 
 import camera
 import key_watcher
-import NeuralNet.convnetshared1 as convshared
 
-import config
 import manual_throttle_map
 
+# Kartputer modules
+main_car_directory = os.path.dirname(os.path.realpath(__file__))
+carputer_directory = os.path.dirname(main_car_directory)
+nn_directory = os.path.join(carputer_directory, "NeuralNet")
+
+# Configuration file
+sys.path.append(carputer_directory)
+import config
+
+# Neural Network modules
+sys.path.append(nn_directory)
+from convnetshared1 import NNModel
+from data_model import TrainingData
 
 # Get args.
 args = docopt(__doc__)
@@ -171,79 +183,134 @@ def invert_log_bucket(a):
 	return steer
 
 
-# TOGGLE THIS TO RUN TENSORFLOW
-if True:
-	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
-	sess = tf.Session()
-	# Add ops to save and restore all the variables.
-	saver = tf.train.Saver()
-	# tempfile = args['<path-to-model>'] #+ "/model.ckpt"
-	# tempfile = "/Users/otaviogood/sfe-models/first-run-0937.ckpt"
-	#tempfile = "/Users/otaviogood/sfe-models/golden/turning-bias-cleaned-data-0654.ckpt"
-	# tempfile = "/Users/otaviogood/sfe-models/last-model-1213.ckpt"
-	# tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
-	try:
-		tempfile = config.tf_checkpoint_file #try to load the hardcoded config file path
-		print "loading model from config: " + str(tempfile)
-	except:
-		tempfile = config.load('last_tf_model') #gets the cached last tf trained model
-		print "loading latest trained model: " + str(tempfile)
+##########################
+# Tensorflow Functions   #
+##########################
+def setup_tensorflow():
+    """Restores a tensorflow session and returns it if successful
+    """
+    net_model = NNModel()
 
-	try:
-		saver.restore(sess, tempfile)
-	except:
-		print 'Cannot restore session'
-		
-	def do_tensor_flow(frame, odo_relative_to_start, speed):
-		# Take a camera frame as input, send it to the neural net, and get steering back.
-		resized = cv2.resize(frame, (128, 128))
-		assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
-		resized = resized.ravel()  # flatten the shape of the tensor.
-		resized = resized[np.newaxis]  # make a batch of size 1.
-		# scale values to match what's in filemash.
+    tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
+    sess = tf.Session(config=tf_config)
 
-		odo_arr = np.array([odo_relative_to_start / 1000.0])[np.newaxis]
-		vel_arr = np.array([speed * 10.0])[np.newaxis]
-		pulse_arr = np.zeros((vel_arr.shape[0], convshared.numPulses))  # HACK HACK!!!
-		current_odo = odo_relative_to_start / convshared.pulseScale  # scale it so the whole track is in range. MUST MATCH CONV NET!!!
-		for num in xrange(convshared.numPulses):
-			# http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
-			pulse_arr[0, num] = max(0.0, 1 - abs(current_odo - num))
-		steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr, train_mode: 0.0})  # run tensorflow
-		steer = invert_log_bucket(steering_result[0])
-		if config.use_throttle_manual_map:
-			throt = manual_throttle_map.from_throttle_buckets(throttle_result[0])
-		else:
-			throt = invert_log_bucket(throttle_result[0])
-		return (steer, throt)
+    # Add ops to save and restore all of the variables
+    saver = tf.train.Saver()
 
+    # Load the model checkpoint file
+    try:
+        tmp_file = config.tf_checkpoint_file
+        print("Loading model from config: {}".format(tmp_file))
+    except:
+		tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
+		print "loading latest trained model: " + str(tmp_file)
+        # print("CAN'T FIND THE GOOD MODEL")
+        # sys.exit(-1)
 
-if False:
-	ops = model.network.graph_ops(model.network.params)
-	x_input = ops[0]
-	steering_output = ops[3]
-	throttle_output = ops[4]
-	sess = tf.Session()
-	saver = tf.train.Saver()
-	saver.restore(sess, "model/model.cpkt")
+    # Try to restore a session
+    try:
+        saver.restore(sess, tmp_file)
+    except:
+        print("Error restoring TF model: {}".format(tmp_file))
+        sys.exit(-1)
 
-	def do_tensor_flow(frame, odo, speed):
-		# Take a camera frame as input, send it to the neural net, and get steering back.
-		resized = cv2.resize(frame, (128, 128))
-		assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
-		resized = resized[np.newaxis]  # make a batch of size 1.
-		steering, throttle = sess.run(
-			[steering_output, throttle_output], feed_dict={x_input: resized})  # run tensorflow
-		steering = int(steering[0][0] + 90)
-		throttle = int(throttle[0][0] + 90)
-		return steering, throttle
+    return sess, net_model
+
+def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
+	# Resize our image from the car
+	resized = cv2.resize(frame, (128, 128))
+	assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
+
+	# speed = logging_dict["speedometer"]
+
+	# Setup the data and run tensorflow
+	batch = TrainingData.FromRealLife(resized, odo_ticks, vel)
+	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_pred], feed_dict=batch.FeedDict(net_model))
+	steer_regression += 90
+	throttle_regression += 90
+
+	# Get to potentiometer
+	steer_regression = config.TensorflowToSteering(steer_regression)
+
+	# Map to what car wants
+	# throttle = invert_log_bucket(throttle_pred)
+
+	return steer_regression, throttle_regression
+
+# # TOGGLE THIS TO RUN TENSORFLOW
+# if True:
+# 	x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
+# 	sess = tf.Session()
+# 	# Add ops to save and restore all the variables.
+# 	saver = tf.train.Saver()
+# 	# tempfile = args['<path-to-model>'] #+ "/model.ckpt"
+# 	# tempfile = "/Users/otaviogood/sfe-models/first-run-0937.ckpt"
+# 	#tempfile = "/Users/otaviogood/sfe-models/golden/turning-bias-cleaned-data-0654.ckpt"
+# 	# tempfile = "/Users/otaviogood/sfe-models/last-model-1213.ckpt"
+# 	# tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
+# 	try:
+# 		tempfile = config.tf_checkpoint_file #try to load the hardcoded config file path
+# 		print "loading model from config: " + str(tempfile)
+# 	except:
+# 		tempfile = config.load('last_tf_model') #gets the cached last tf trained model
+# 		print "loading latest trained model: " + str(tempfile)
+#
+# 	try:
+# 		saver.restore(sess, tempfile)
+# 	except:
+# 		print 'Cannot restore session'
+#
+# 	def do_tensor_flow(frame, odo_relative_to_start, speed):
+# 		# Take a camera frame as input, send it to the neural net, and get steering back.
+# 		resized = cv2.resize(frame, (128, 128))
+# 		assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
+# 		resized = resized.ravel()  # flatten the shape of the tensor.
+# 		resized = resized[np.newaxis]  # make a batch of size 1.
+# 		# scale values to match what's in filemash.
+#
+# 		odo_arr = np.array([odo_relative_to_start / 1000.0])[np.newaxis]
+# 		vel_arr = np.array([speed * 10.0])[np.newaxis]
+# 		pulse_arr = np.zeros((vel_arr.shape[0], convshared.numPulses))  # HACK HACK!!!
+# 		current_odo = odo_relative_to_start / convshared.pulseScale  # scale it so the whole track is in range. MUST MATCH CONV NET!!!
+# 		for num in xrange(convshared.numPulses):
+# 			# http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
+# 			pulse_arr[0, num] = max(0.0, 1 - abs(current_odo - num))
+# 		steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr, train_mode: 0.0})  # run tensorflow
+# 		steer = invert_log_bucket(steering_result[0])
+# 		if config.use_throttle_manual_map:
+# 			throt = manual_throttle_map.from_throttle_buckets(throttle_result[0])
+# 		else:
+# 			throt = invert_log_bucket(throttle_result[0])
+# 		return (steer, throt)
+#
+#
+# if False:
+# 	ops = model.network.graph_ops(model.network.params)
+# 	x_input = ops[0]
+# 	steering_output = ops[3]
+# 	throttle_output = ops[4]
+# 	sess = tf.Session()
+# 	saver = tf.train.Saver()
+# 	saver.restore(sess, "model/model.cpkt")
+#
+# 	def do_tensor_flow(frame, odo, speed):
+# 		# Take a camera frame as input, send it to the neural net, and get steering back.
+# 		resized = cv2.resize(frame, (128, 128))
+# 		assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
+# 		resized = resized[np.newaxis]  # make a batch of size 1.
+# 		steering, throttle = sess.run(
+# 			[steering_output, throttle_output], feed_dict={x_input: resized})  # run tensorflow
+# 		steering = int(steering[0][0] + 90)
+# 		throttle = int(throttle[0][0] + 90)
+# 		return steering, throttle
 
 # This checks that we are running the program that allows us to close the lid of our mac and keep running.
-def CheckForInsomnia():
-	proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
-	(out, err) = proc.communicate()
-	# print "program output:", out
-	if not "Insomnia" in out:
+def check_for_insomnia():
+    print("Checking for Insomnia (necessary for everything to work during lid close)")
+    proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
+    (out, err) = proc.communicate()
+
+    if not "Insomnia" in out:
 		print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
 		print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
 		print "How are you gonna drive a car if your driver is asleep?"
@@ -269,10 +336,15 @@ def main():
 	last_odo = 0
 	last_millis = 0.0
 
-	CheckForInsomnia()
+	# Check for insomnia
+	if platform.system() == "Darwin":
+		check_for_insomnia()
 
 	# Setup ports.
 	port_in, port_out = setup_serial_and_reset_arduinos()
+
+	# Setup tensorflow
+	sess, net_model = setup_tensorflow()
 
 	# Start the clock.
 	drive_start_time = time.time()
@@ -352,7 +424,8 @@ def main():
 				last_millis = milliseconds
 			# Read a frame from the camera.
 			frame = camera_stream.read()
-			steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
+			steering, throttle = do_tensorflow(sess, net_model, frame, odometer_ticks - last_odometer_reset, vel)
+			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
 		if we_are_recording and currently_running:
 			# TODO(matt): also record vel in filename for tf?
