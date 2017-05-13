@@ -46,14 +46,14 @@ class NNModel:
     img_channels = 3
     fc1_num_outs = 256
     fc2_num_outs = 256
-    l1_conv_size = 7
-    l1_num_convs = 16  # 8
+    l1_conv_size = 5
+    l1_num_convs = 8  # 8
     l2_conv_size = 5
-    l2_num_convs = 32  # 12
+    l2_num_convs = 12  # 12
     l3_conv_size = 5
-    l3_num_convs = 64  # 16
+    l3_num_convs = 16  # 16
     l4_conv_size = 5
-    l4_num_convs = 128  # 32
+    l4_num_convs = 32  # 32
 
     def __init__(self):
         self.in_image = tf.placeholder(tf.float32, shape=[None, NNModel.width * NNModel.height * NNModel.img_channels], name='in_image')

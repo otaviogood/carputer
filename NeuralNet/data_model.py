@@ -65,6 +65,7 @@ class TrainingData:
 
         # Allocate one-hot arrays for labels
         obj.steer_array = np.zeros((size), dtype=np.float32)
+        obj.throttle_array = np.zeros((size), dtype=np.float32)
         obj.steer_onehot_array = np.zeros((size, convshared.NNModel.max_log_outs), dtype=np.float32)
         obj.throttle_onehot_array = np.zeros((size, convshared.NNModel.max_log_outs), dtype=np.float32)
 

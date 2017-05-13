@@ -34,9 +34,9 @@ sys.path.append(carputer_directory)
 import config
 
 # Neural Network modules
-sys.path.append(nn_directory)
-from convnetshared1 import NNModel
-from data_model import TrainingData
+# sys.path.append(nn_directory)
+from NeuralNet.convnetshared1 import NNModel
+from NeuralNet.data_model import TrainingData
 
 # Get args.
 args = docopt(__doc__)
@@ -86,7 +86,7 @@ def setup_serial_and_reset_arduinos():
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
-	port_out = serial.Serial(name_out, 115200, timeout=0.0)
+	port_out = serial.Serial(name_out, 38400, timeout=0.0)
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
@@ -212,7 +212,7 @@ def setup_tensorflow():
         saver.restore(sess, tmp_file)
     except:
         print("Error restoring TF model: {}".format(tmp_file))
-        sys.exit(-1)
+        # sys.exit(-1)
 
     return sess, net_model
 
@@ -230,7 +230,7 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 	throttle_regression += 90
 
 	# Get to potentiometer
-	steer_regression = config.TensorflowToSteering(steer_regression)
+	# steer_regression = config.TensorflowToSteering(steer_regression)
 
 	# Map to what car wants
 	# throttle = invert_log_bucket(throttle_pred)

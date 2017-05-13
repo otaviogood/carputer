@@ -40,7 +40,7 @@ void setup() {
   // reserve 200 bytes for the inputString:
   inputString.reserve(200);
 
-  Serial.begin(115200);//115200
+  Serial.begin(38400);//115200
 
   Serial.println("CarRace IOHub Setup BEGIN");
 
@@ -80,7 +80,7 @@ void loop() {
   // ------------ KEEP ALIVE!!!! ------------
   // This hack will roll over once every 49 days. :(
   int now = millis();
-  if (now > lastkeepalive + 500) {
+  /*if (now > lastkeepalive + 1500) {
     while (true) {
       Serial.println("LOST KEEP ALIVE!!! KILLING EVERYTHING!!!");
       servo_drive.write(0);  // reset to not moving.
@@ -88,7 +88,7 @@ void loop() {
       alive = false;
       return;
     }
-  }
+  }*/
 
   buttonState = digitalRead(buttonPin);
 

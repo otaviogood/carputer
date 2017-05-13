@@ -3,7 +3,8 @@
 
 
 ## Recording pipline
-
+0. Turn on ESC, RC controller. Plug in battery, USB. Start switch to off.
+0. Run InsomniaX and disable lid sleep and idle sleep.
 0. activate the virtualenv: `source /path/to/venv/bin/activate`
 0. run a script to drive and record training data: `python main_car.py record` --
 this will let you have manual control over the car
@@ -12,6 +13,8 @@ and save out recordings when you flip the switch
 
 ## Run autonomously
 
+0. Turn on ESC, RC controller. Plug in battery, USB. Start switch to off.
+0. Run InsomniaX and disable lid sleep and idle sleep.
 0. activate the virtualenv: `source /path/to/venv/bin/activate`
 0. run a script to let tensorflow drive: `python main_car.py tf` --
 when you flip the switch, you will lose manual control
@@ -22,7 +25,8 @@ and the car will attempt to drive on its own
 
 ## Training pipline
 
-0. convert images to np arrays: `python NeuralNet/filemash.py /path/to/data` (Can be multiple paths)
+0. convert TRAINING images to np arrays: `python NeuralNet/filemash.py /path/to/data` (Can be multiple paths)
+0. convert TEST images to np arrays: `python NeuralNet/filemash.py /path/to/data --gen_test` (Can be multiple paths)
 0. train a model: `python NeuralNet/convnet02.py`
 0. use this model to drive the car (see above)
 
@@ -41,6 +45,7 @@ and the car will attempt to drive on its own
 
 ### Software TODOs
 
+- [ ] Fix keepalive on Arduino
 - [ ] Debug crowded autonomous runs with lots of people standing around throwing off the neural net
 - [ ] Fix the kill switch so it locks brakes instead of coasting. Just a logic bug I think.
 - [ ] Look into remote SSH type software so we don't have to keep popping open the car.
