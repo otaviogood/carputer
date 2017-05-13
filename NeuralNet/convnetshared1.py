@@ -44,8 +44,8 @@ class NNModel:
     widthD16 = width / 16
     heightD16 = height / 16
     img_channels = 3
-    fc1_num_outs = 256
-    fc2_num_outs = 256
+    fc1_num_outs = 1024
+    fc2_num_outs = 1024
     l1_conv_size = 5
     l1_num_convs = 8  # 8
     l2_conv_size = 5
@@ -148,6 +148,7 @@ class NNModel:
                         tf.nn.l2_loss(W_conv3) + tf.nn.l2_loss(b_conv3) +
                         tf.nn.l2_loss(W_conv4) + tf.nn.l2_loss(b_conv4) +
                         tf.nn.l2_loss(W_fc1) + tf.nn.l2_loss(b_fc1) +
+                        tf.nn.l2_loss(W_fc2) + tf.nn.l2_loss(b_fc2) +
                         tf.nn.l2_loss(W_fc4) + tf.nn.l2_loss(b_fc4)
                         )
         # Add the regularization term to the loss.
@@ -155,7 +156,7 @@ class NNModel:
         # self.squared_diff = tf.reduce_mean(tf.squared_difference(self.steering_regress_result, self.steering_regress_))
         # self.squared_diff = tf.squared_difference(self.steering_regress_result, self.steering_regress_)
         cross_entropy = cross_entropy*1.0 + 0.0001 * regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*0.1
-        # cross_entropy = cross_entropy*1.0 + 0.0001 * regularizers
+        # cross_entropy = 0.0001 * regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*0.1
         # -----------------------------------------------------------------------------------
 
 
