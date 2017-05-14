@@ -97,7 +97,7 @@ def setup_serial_and_reset_arduinos():
 def make_data_folder(base_path):
 	# Make a new dir to store data.
 	base_path = os.path.expanduser(base_path)
-	session_dir_name = time.strftime('%Y_%m_%d__%I_%M_%S_%p')
+	session_dir_name = time.strftime('%Y_%m_%d__%H_%M_%S_%p')
 	session_full_path = os.path.join(base_path, session_dir_name)
 	if not os.path.exists(session_full_path):
 		os.makedirs(session_full_path)
