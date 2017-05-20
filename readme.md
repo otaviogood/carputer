@@ -1,6 +1,13 @@
 
 # Carputer
 
+Carputer is a 1/10th scale self driving car. It drives based on video camera and speedometer inputs. It uses a neural network to drive. The camera image and speedometer get sent to the neural network and the network outputs steering and throttle motor controls for the car.
+
+Since the car uses a neural network for driving, it has to be trained. The training process is basically driving it around a track about 20 times or so using the car's radio control. During that driving, we record all of the radio control inputs along with the video and speedometer data. Once we have that, the neural network can learn how to mimic our driving style by outputting steering and throttle based on the video and speedometer.
+
+The process is to record, train, and then run autonomously, as seen in the steps below.
+
+This is an experimental setup, so it's not super-clean code or hardware.
 
 ## Recording pipline
 0. Turn on ESC, RC controller. Plug in battery, USB. Start switch to off.

@@ -70,8 +70,8 @@ test_data = TrainingData.fromfilename("test", args['--indir'])
 numTest = 2000
 skipTest = 4
 if config.running_on_laptop:
-    numTest = 384 * 1
-    skipTest = 8
+    numTest = 384 * 2
+    skipTest = 4
 test_data.TrimArray(numTest, skipTest)
 
 net_model = NNModel()
