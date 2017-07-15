@@ -4,8 +4,7 @@
 Main script for driving the kartputer autnomously and manually
 
 Usage:
-    main_car.py record
-    main_car.py tf
+    main_car.py [--record]
 
 """
 # System modules
@@ -14,20 +13,31 @@ import platform
 import signal
 import subprocess
 import sys
+import time
 
 # Third party modules
 import argparse
+import cv2
 import serial
 
 # Our modules
+import camera
 import debug_message as dm
 dm.verbose = True
 
-# Kartputer modules
+# Cartputer modules 
 main_car_directory = os.path.dirname(os.path.realpath(__file__))
 carputer_directory = os.path.dirname(main_car_directory)
 nn_directory = os.path.join(carputer_directory, "NeuralNet")
 
+# Configuration file
+sys.path.append(carputer_directory)
+import config
+
+# Neural Network modules
+# sys.path.append(nn_directory)
+# from convnetshared1 import NNModel
+# from data_model import TrainingData
 
 #########################
 # Constants and Globals #
@@ -67,6 +77,12 @@ def parse_command_line():
 
     return args.record
 
+def setup_camera():
+    """Initializes threaded camera class to read frames from the video stream
+
+    """
+    return camera.CameraStream(src=config.camera_id)
+
 def setup_serial_port(port_name, baudrate):
     
     dm.print_info("Opening port: {} with baudrate: {}".format(port_name, baudrate))
@@ -90,7 +106,36 @@ signal.signal(signal.SIGINT, signal_handler)
 #############################
 # Data Processing functions #
 #############################
+session_dir_name = None
 
+def make_data_folder(base_path):
+    """ Make directories for logging data
+    
+        ~/training_images = For data taken during teleop mode
+        ~/tf_driving_images = For data taken during autonomous mode
+    """
+    global session_dir_name
+    base_path = os.path.expanduser(base_path)
+    session_dir_name = time.strftime('%Y_%m_%d__%I_%M_%S_%p')
+    session_full_path = os.path.join(base_path, session_dir_name)
+    if not os.path.exists(session_full_path):
+        os.makedirs(session_full_path)
+    
+    return session_full_path    
+
+def init_data_logging(manual_dir, auto_dir):
+    """Creates data logging directories and setups a dict for easy logging
+
+    """
+    manual_full_path = make_data_folder(manual_dir)
+    auto_full_path = make_data_folder(auto_dir)
+
+    logging_dict = {
+        "manual": manual_full_path,
+        "auto": auto_full_path
+    }
+
+    return logging_dict
 ##########################
 # Tensorflow Functions   #
 ##########################
@@ -108,8 +153,36 @@ def main():
     dm.print_debug("Parsing command line arguments")
     # Parse command line looking for the record flag
     # TODO (GM): Add more command line options, camera id, serial port, etc
-    # TODO (ALL): We should always be recording data, disregard this flag
+    # TODO (ALL): We should always be recording data, this flag decides where to dump the data
     record = parse_command_line()
+
+
+    # Setup Serial ports
+
+    # Setup camera
+    camera_stream = setup_camera()
+    camera_stream.start()
+    frame = camera_stream.read()
+
+    # Setup Tensorflow
+
+    # Init the frame counter
+    frame_count = 0
+
+    # Init the time
+    milliseconds = time.time() * 1000.0
+
+        # Setup data logging
+    # Use this dict to share the common data between auto and manual driving
+    logging_dir_map = init_data_logging(config.manual_driving_log_dir, config.auto_driving_log_dir)
+    logging_dict = {
+        "dir_map": logging_dir_map,
+        "milliseconds": milliseconds,
+        "frame_count": frame_count,
+        "frame": frame,
+        "speedometer": speedometer
+    }
+
     while is_running:
         dm.print_info(" ")
 

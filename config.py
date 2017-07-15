@@ -1,22 +1,34 @@
 import math
 
 # This file to contain all the config variables shared across modules
+# Data logging directories
+manual_driving_log_dir = "~/carputer/training_images"
+auto_driving_log_dir = "~/carputer/tf_driving_images"
+
+# Serial ports
+car_port_name = "/dev/cu.usbmodem14241"
+car_baud_rate = 9600
+
+speedometer_port_name = "/dev/cu.usbmodem14211"
+speedometer_baud_rate = 9600
+
+camera_id = 0
+
+# The laptop has very little GPU memory, so we have to scale down to run on it.
+running_on_laptop = True
+# Should tensorflow use the GPU
+should_use_gpu = 0
 
 use_throttle_manual_map = True
 use_median_filter_throttle = False
 # floating point 0 or 1 to multiply against odo value
 use_odometer = 1.0
-# The laptop has very little GPU memory, so we have to scale down to run on it.
-running_on_laptop = True
+
 do_flip_augmentation = False
 
-# Should tensorflow use the GPU
-should_use_gpu = 0
-
-camera_id = 0
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.
 # If no tf_checkpoint_file variable is found, the latest generated model is loaded.
-#tf_checkpoint_file = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt" 
+# tf_checkpoint_file = "/Users/otaviogood/kartputer_drive_model/model.ckpt" 
 
 
 # http://www.iquilezles.org/apps/graphtoy/
