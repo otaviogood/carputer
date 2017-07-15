@@ -172,6 +172,9 @@ def main():
     # Init the time
     milliseconds = time.time() * 1000.0
 
+    # init the delta in odometer
+    odo_delta = 0
+
         # Setup data logging
     # Use this dict to share the common data between auto and manual driving
     logging_dir_map = init_data_logging(config.manual_driving_log_dir, config.auto_driving_log_dir)
@@ -180,13 +183,45 @@ def main():
         "milliseconds": milliseconds,
         "frame_count": frame_count,
         "frame": frame,
-        "speedometer": speedometer
+        "odo_delta": odo_delta
     }
 
+    if record:
+        dm.print_info("Saving training images to: {}".format(logging_dir_map["manual"]))
+    else:
+        dm.print_info("This is an autonomous run. Saving images to {}".format(logging_dir_map["auto"]))
+    
+
+
     while is_running:
-        dm.print_info(" ")
+        # Start the loop timer
+        loop_start_time = time.time()
+        dm.print_debug("In main loop")
 
+        # Grab a frame from the camera
+        # Default size from read() is [320, 240]
+        logging_dict["frame"] = camera_stream.read()
 
+        # Read values from the arduino
+        # steering, throttle, engage_killswitch, engage_autonomous_driving, reset_odo = process_arduino_inputs()
+
+        # Display for debug
+        # cv2.imshow("frame", logging_dict["frame"])
+        # cv2.waitKey(1)
+
+        # Attempt to go at 30 fps. In reality, we could go slower if something hiccups.
+        seconds = time.time() - loop_start_time
+        dm.print_debug("seconds: {}".format(seconds))
+
+        while seconds < 1 / 30.:
+            time.sleep(0.001)
+            seconds = time.time() - loop_start_time
+        
+        # Increment the frame_counter
+        logging_dict["frame_count"] += 1
+
+        # Update the time, in ms
+        logging_dict["milliseconds"] = time.time() * 1000.0
 
 
 
@@ -273,7 +308,7 @@ def main():
 #     # Flush for good luck. Not sure if this does anything. :)
 #     port_in.flush()
 #     port_out.flush()
-#     print("Serial setup complete.")
+#     print("Serial setup complete.")config.manual_driving_log_dir, config.auto_driving_log_dir
 #     return port_in, port_out
 
 
