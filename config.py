@@ -6,13 +6,13 @@ manual_driving_log_dir = "~/carputer/training_images"
 auto_driving_log_dir = "~/carputer/tf_driving_images"
 
 # Serial ports
-car_port_name = "/dev/cu.usbmodem14241"
-car_baud_rate = 9600
+input_port_name = "/dev/ttyACM1"
+input_port_baudrate = 38400
 
-speedometer_port_name = "/dev/cu.usbmodem14211"
-speedometer_baud_rate = 9600
+output_port_name = "/dev/ttyACM0"
+output_port_baudrate = 38400
 
-camera_id = 0
+camera_id = 1
 
 # The laptop has very little GPU memory, so we have to scale down to run on it.
 running_on_laptop = True

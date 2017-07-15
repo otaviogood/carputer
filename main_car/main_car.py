@@ -9,6 +9,7 @@ Usage:
 """
 # System modules
 import os
+import re
 import platform
 import signal
 import subprocess
@@ -23,7 +24,7 @@ import serial
 # Our modules
 import camera
 import debug_message as dm
-dm.verbose = True
+dm.verbose = False
 
 # Cartputer modules 
 main_car_directory = os.path.dirname(os.path.realpath(__file__))
@@ -92,7 +93,7 @@ def setup_serial_port(port_name, baudrate):
 
     # Setup the port
     try:
-        port = serial.Serial(port_name, baudrate, timeout=None)
+        port = serial.Serial(port_name, baudrate, timeout=0.0, writeTimeout=0)
     except(OSError, serial.SerialException):
         dm.print_fatal("Could not open serial port: {} with baud: {}".format(port_name, baudrate))
         sys.exit(-1)
@@ -126,12 +127,7 @@ def make_data_folder(base_path):
     if not os.path.exists(session_full_path):
         os.makedirs(session_full_path)
     
-    return session_full_path    def clamp(value, min, max):
-    if(value < min):
-        return min
-    if(value > max):
-        return max
-    return value
+    return session_full_path
 
 def init_data_logging(manual_dir, auto_dir):
     """Creates data logging directories and setups a dict for easy logging
@@ -146,6 +142,54 @@ def init_data_logging(manual_dir, auto_dir):
     }
 
     return logging_dict
+
+input_buffer = ''
+def process_steering_throttle(steering, throttle, port):
+    """Gets the steering and throttle as requested by the RC transmitter
+        Returns: (steering, throttle, button_arduino_in, button_arduino_out)
+    """
+    global input_buffer
+    # Input is buffered because sometimes partial lines are read
+    try:
+        input_buffer += port.read(port.in_waiting).decode('ascii')
+    except UnicodeDecodeError:
+        # Bad data over serial port
+        input_buffer = ''
+        dm.print_warning("Serial port error for input port")
+    
+    # Init steering throttle and aux1
+    steering = None
+    throttle = None
+    aux1 = None
+
+    while '\n' in input_buffer:
+        line, input_buffer = input_buffer.split('\n', 1)
+        match = re.search(r'(\d+) (\d+) (\d+)', line)
+        if match:
+            steering = int(match.group(1))
+            throttle = int(match.group(2))
+            aux1 = int(match.group(3))
+        if line[0:1] == 'S':
+            # This is just a toggle button
+            dm.print_info("ButtonAIn toggle")
+    
+    return steering, throttle, aux1
+
+output_buffer = ''
+
+def process_output_arduino():
+    """Gets the buttons, odo ticks, and ms
+        Returns: (steering, throttle, button_arduino_in, button_arduino_out)
+    """
+    global input_buffer
+    # Input is buffered because sometimes partial lines are read
+    try:
+        input_buffer += port.read(port.in_waiting).decode('ascii')
+    except UnicodeDecodeError:
+        # Bad data over serial port
+        input_buffer = ''
+        dm.print_warning("Serial port error for input port")
+
 
 
 def log_data(steering, throttle, logging_dict, logging_type):
@@ -177,27 +221,28 @@ def log_data(steering, throttle, logging_dict, logging_type):
 ##########################
 # Main driving functions #
 ##########################
-def send_vehicle_commands(steering, throttle, port):
+def send_vehicle_commands(old_steering, old_throttle, steering, throttle, port):
     """
         Sends steering and throttle to the kart 
     """
-
-    # Clamp steering
-    steering = clamp(steering, STEERING_MIN_VALUE, STEERING_MAX_VALUE)
+    # Steering
+    if old_steering != steering:
+        steering_out = ('S%d\n' % steering).encode('ascii')
+        port.write(steering_out)
+        dm.print_warning("Write one {}".format(steering_out))
 
     # Clamp throttle
-    throttle = clamp(throttle, THORTTLE_MIN_VALUE, THORTTLE_MAX_VALUE)
-
-    # Encode data for Arduino
-    steering_out = ('S%d\n' % steering).encode('ascii')
-    throttle_out = ('T%d\n' % throttle).encode('ascii')
-
-    # Write
-    port.write(steering_out)
+    if old_throttle != throttle:
+        if 88 <= throttle <= 92:
+            throttle = 90
+        else:
+            throttle = min(throttle, 110)
+          
+        throttle_out = ('D%d\n' % throttle).encode('ascii')
+        port.write(throttle_out)
+        dm.print_warning("Write two {}".format(throttle_out))
     port.flush()
     
-    port.write(throttle_out)
-    port.flush()
 
 def stop_vehicle(port):
     """Sends a zero throttle and middle steering
@@ -218,32 +263,17 @@ def drive_autonomously(session, net_model, car_port, logging_dict):
     # log data
     log_data(steering, throttle, logging_dict, "auto")
 
-def drive_manually(steering, throttle, port, logging_dict):
-    # Arduino is expecting
-    # steering,throttle
-
-    # Map steering
-    #mapped_steering = int(map_to(steering, -1.0, 1.0, STEERING_MIN_VALUE, STEERING_MAX_VALUE))
-    # exp_steering = exponential_map_to(steering, 1.7)
-    # mapped_steering = int(map_to(exp_steering, -1.0, 1.0, STEERING_MIN_VALUE, STEERING_MAX_VALUE))
-
-    
-    # # Artifical "deadband" for Xbox 360 controller
-    # if mapped_steering <= 95 and mapped_steering >= 90:
-    #     mapped_steering = 90
-
-    # # Map throttle
-    # # Deadband throttle
-    # if throttle < -0.75:
-    #     throttle = -0.75
-    # mapped_throttle = int(map_to(throttle, -0.75, 1, THORTTLE_MIN_VALUE, THORTTLE_MAX_VALUE))
-
+def drive_manually(old_steering, old_throttle, steering, throttle, port, logging_dict):
     # Send these values over the serial port
-    send_vehicle_commands(mapped_steering, mapped_throttle, port)
+    send_vehicle_commands(old_steering, old_throttle,steering, throttle, port)
 
     # Log the values
-    log_data(mapped_steering, mapped_throttle, logging_dict, "manual")
+    #log_data(steering, throttle, logging_dict, "manual")
 
+def check_for_killswitch(steering, throttle):
+    if (steering > 130 or steering < 50) and throttle > 130:
+        return True
+    return False
 
 
 def main():
@@ -256,18 +286,21 @@ def main():
     # TODO (ALL): We should always be recording data, this flag decides where to dump the data
     record = parse_command_line()
 
-
     # Setup Serial ports
+    dm.print_debug("Setting up serial ports...")
+    input_port = setup_serial_port(config.input_port_name, config.input_port_baudrate)
+    output_port = setup_serial_port(config.output_port_name, config.output_port_baudrate)
 
     # Setup camera
+    dm.print_debug("Setting up camera")
     camera_stream = setup_camera()
     camera_stream.start()
     frame = camera_stream.read()
-
-    # Setup Tensorflow
-
     # Init the frame counter
     frame_count = 0
+
+    # Setup Tensorflow
+    dm.print_debug("Setting up tensorflow")
 
     # Init the time
     milliseconds = time.time() * 1000.0
@@ -292,6 +325,16 @@ def main():
         dm.print_info("This is an autonomous run. Saving images to {}".format(logging_dir_map["auto"]))
     
 
+    # init steering and throttle
+    steering = 0
+    throttle = 0
+    aux1 = 0
+
+    # Init old values
+    old_steering = 0
+    old_throttle = 0
+    old_aux1 = 1000
+
     # Main loop booleans
     global is_running
     is_autonomous = False # Is tensorflow driving
@@ -302,35 +345,61 @@ def main():
     while is_running:
         # Start the loop timer
         loop_start_time = time.time()
-        dm.print_debug("In main loop")
 
         # Grab a frame from the camera
         # Default size from read() is [320, 240]
         logging_dict["frame"] = camera_stream.read()
 
         # Read values from the arduino
-        # steering, throttle, engage_killswitch, engage_autonomous_driving, reset_odo = process_arduino_inputs()
+        new_steering, new_throttle, new_aux1 = process_steering_throttle(steering, throttle, input_port)
 
-
-        # Check for the engage auto button
-        if engage_autonomous_driving:
-            dm.print_info("Switching to autonomous mode")
-            is_autonomous = True
+        # Check for valid input
+        if new_steering != None:
+            steering = new_steering
+        if new_throttle != None:
+            throttle = new_throttle
+        if new_aux1 != None:
+            aux1 = new_aux1
+        dm.print_debug("S: {}, T: {}, aux1: {}".format(steering, throttle, old_aux1))
         
-        # Check for killswitch
-        if engage_killswitch:
-            dm.print_warning("Killswitch engaged")
-            is_autonomous = False
+        aux_delta = abs(int(old_aux1) - int(aux1))
+
+        # Reenable check
+        if not is_autonomous and (aux_delta > 400):
+            dm.print_warning("Reengaging auto mode")
+            is_autonomous = True
+
+        # Killswitch checks and reenables
+        engage_killswitch = check_for_killswitch(steering, throttle)
+
+        # If we are in auto mode
+        if is_autonomous:
+            # Was the kill switch engaged?
+            if engage_killswitch:
+                dm.print_warning("Killswitch engaged, stopping vehicle")
+                # stop_vehicle()
+                is_autonomous = False
+            else:
+                # Drive with tf
+                dm.print_debug("Driving with Tensorflow")
+        else:
+            if record:
+                # log data
+                dm.print_debug("Logging Training Data")
+            else:
+                # Drive manually 
+                dm.print_debug("Driving manually")
+                drive_manually(old_steering, old_throttle, steering, throttle, output_port, logging_dict)
 
 
         # Branch for training data, teleop,  and autonomous
-        if record:
-            log_data(steering, throttle, logging_dict, "manual")
-        else:
-            if is_autonomous:
-                drive_autonomously(sess, net_model, car_port, logging_dict)
-            else:
-                drive_manually(steering, throttle, car_port, logging_dict)
+        # if record:
+        #     log_data(steering, throttle, logging_dict, "manual")
+        # else:
+        #     if is_autonomous:
+        #         drive_autonomously(sess, net_model, car_port, logging_dict)
+        #     else:
+        #         drive_manually(steering, throttle, car_port, logging_dict)
         
         # Display for debug
         # cv2.imshow("frame", logging_dict["frame"])
@@ -347,61 +416,15 @@ def main():
         # Increment the frame_counter
         logging_dict["frame_count"] += 1
 
+        # Update the values
+        old_aux1 = aux1
+        old_steering = steering
+        old_throttle = throttle
         # Update the time, in ms
         logging_dict["milliseconds"] = time.time() * 1000.0
 
 
 
-    
-# import math
-# import os
-# import re
-# import sys
-# import time
-# import subprocess
-
-# import cv2
-# from docopt import docopt
-# import numpy as np
-# import platform
-# import serial
-# #import tensorflow as tf
-
-# import camera
-# import key_watcher
-
-# import manual_throttle_map
-
-# # Kartputer modules
-# main_car_directory = os.path.dirname(os.path.realpath(__file__))
-# carputer_directory = os.path.dirname(main_car_directory)
-# nn_directory = os.path.join(carputer_directory, "NeuralNet")
-
-# # Configuration file
-# sys.path.append(carputer_directory)
-# import config
-
-
-
-# # Get args.
-# args = docopt(__doc__)
-
-
-# # Check the mode: recording vs TF driving vs TF driving + recording.
-# if args['record']:
-#     we_are_autonomous = False
-#     we_are_recording = True
-#     print("\n------ Ready to record training data ------\n")
-# elif args['tf']:
-#     we_are_autonomous = True
-#     we_are_recording = True
-#     print("\n****** READY TO DRIVE BY NEURAL NET and record data ******\n")
-
-
-# # Set up camera and key watcher.
-# camera_stream = camera.CameraStream(src=config.camera_id).start()
-# last_key = ['']
-# key_watcher.KeyWatcher(last_key).start()
 
 
 # # Setup buffers and vars used by arduinos.
@@ -413,40 +436,6 @@ def main():
 # button_arduino_out = 0
 # button_arduino_in = 0
 
-
-# def setup_serial_and_reset_arduinos():
-#     # This will set up the serial ports. If they are already set up, it will
-#     # reset them, which also resets the Arduinos.
-#     print("Setting up serial and resetting Arduinos.")
-#     # On MacOS, you can find your Arduino via Terminal with
-#     # ls /dev/tty.*
-#     # then you can read that serial port using the screen command, like this
-#     # screen /dev/tty.[yourSerialPortName] [yourBaudRate]
-#     if os.name == 'nt':
-#         name_in = 'COM3'
-#         name_out = 'COM4'
-#     else:
-#         name_in = '/dev/tty.usbmodem14231'  # 5v Arduino Uno (16 bit)
-#         name_out = '/dev/tty.usbmodem14221'  # 3.3v Arduino Due (32 bit)
-#     # 5 volt Arduino Duemilanove, radio controller for input.
-#     port_in = serial.Serial(name_in, 38400, timeout=0.0)
-#     # 3 volt Arduino Due, servos for output.
-#     port_out = serial.Serial(name_out, 38400, timeout=0.0)
-#     # Flush for good luck. Not sure if this does anything. :)
-#     port_in.flush()
-#     port_out.flush()
-#     print("Serial setup complete.")config.manual_driving_log_dir, config.auto_driving_log_dir
-#     return port_in, port_out
-
-
-# def make_data_folder(base_path):
-#     # Make a new dir to store data.
-#     base_path = os.path.expanduser(base_path)
-#     session_dir_name = time.strftime('%Y_%m_%d__%H_%M_%S_%p')
-#     session_full_path = os.path.join(base_path, session_dir_name)
-#     if not os.path.exists(session_full_path):
-#         os.makedirs(session_full_path)
-#     return session_full_path
 
 
 # def process_input(port_in, port_out):
@@ -582,84 +571,6 @@ def main():
 
 #     return steer_regression, throttle_regression
 
-# # # TOGGLE THIS TO RUN TENSORFLOW
-# # if True:
-# #     x, odo, vel, pulse, steering_, throttle_, keep_prob, train_mode, train_step, steering_pred, steering_accuracy, throttle_pred, throttle_accuracy, steering_softmax, throttle_softmax, pulse_softmax, conv_maxes, debug_layer = convshared.gen_graph_ops()
-# #     sess = tf.Session()
-# #     # Add ops to save and restore all the variables.
-# #     saver = tf.train.Saver()
-# #     # tempfile = args['<path-to-model>'] #+ "/model.ckpt"
-# #     # tempfile = "/Users/otaviogood/sfe-models/first-run-0937.ckpt"
-# #     #tempfile = "/Users/otaviogood/sfe-models/golden/turning-bias-cleaned-data-0654.ckpt"
-# #     # tempfile = "/Users/otaviogood/sfe-models/last-model-1213.ckpt"
-# #     # tempfile = "/Users/otaviogood/sfe-models/last-last-model-1251.ckpt"
-# #     try:
-# #         tempfile = config.tf_checkpoint_file #try to load the hardcoded config file path
-# #         print "loading model from config: " + str(tempfile)
-# #     except:
-# #         tempfile = config.load('last_tf_model') #gets the cached last tf trained model
-# #         print "loading latest trained model: " + str(tempfile)
-# #
-# #     try:
-# #         saver.restore(sess, tempfile)
-# #     except:
-# #         print 'Cannot restore session'
-# #
-# #     def do_tensor_flow(frame, odo_relative_to_start, speed):
-# #         # Take a camera frame as input, send it to the neural net, and get steering back.
-# #         resized = cv2.resize(frame, (128, 128))
-# #         assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
-# #         resized = resized.ravel()  # flatten the shape of the tensor.
-# #         resized = resized[np.newaxis]  # make a batch of size 1.
-# #         # scale values to match what's in filemash.
-# #
-# #         odo_arr = np.array([odo_relative_to_start / 1000.0])[np.newaxis]
-# #         vel_arr = np.array([speed * 10.0])[np.newaxis]
-# #         pulse_arr = np.zeros((vel_arr.shape[0], convshared.numPulses))  # HACK HACK!!!
-# #         current_odo = odo_relative_to_start / convshared.pulseScale  # scale it so the whole track is in range. MUST MATCH CONV NET!!!
-# #         for num in xrange(convshared.numPulses):
-# #             # http://thetamath.com/app/y=max(0.0,1-abs((x-2)))
-# #             pulse_arr[0, num] = max(0.0, 1 - abs(current_odo - num))
-# #         steering_result, throttle_result = sess.run([steering_pred, throttle_pred], feed_dict={x: resized, keep_prob: 1.0, odo: odo_arr, vel: vel_arr, pulse: pulse_arr, train_mode: 0.0})  # run tensorflow
-# #         steer = invert_log_bucket(steering_result[0])
-# #         if config.use_throttle_manual_map:
-# #             throt = manual_throttle_map.from_throttle_buckets(throttle_result[0])
-# #         else:
-# #             throt = invert_log_bucket(throttle_result[0])
-# #         return (steer, throt)
-# #
-# #
-# # if False:
-# #     ops = model.network.graph_ops(model.network.params)
-# #     x_input = ops[0]
-# #     steering_output = ops[3]
-# #     throttle_output = ops[4]
-# #     sess = tf.Session()
-# #     saver = tf.train.Saver()
-# #     saver.restore(sess, "model/model.cpkt")
-# #
-# #     def do_tensor_flow(frame, odo, speed):
-# #         # Take a camera frame as input, send it to the neural net, and get steering back.
-# #         resized = cv2.resize(frame, (128, 128))
-# #         assert resized.shape == (128, 128, 3)  # Must be correct size and RGB, not RGBA.
-# #         resized = resized[np.newaxis]  # make a batch of size 1.
-# #         steering, throttle = sess.run(
-# #             [steering_output, throttle_output], feed_dict={x_input: resized})  # run tensorflow
-# #         steering = int(steering[0][0] + 90)
-# #         throttle = int(throttle[0][0] + 90)
-# #         return steering, throttle
-
-# # This checks that we are running the program that allows us to close the lid of our mac and keep running.
-# def check_for_insomnia():
-#     print("Checking for Insomnia (necessary for everything to work during lid close)")
-#     proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
-#     (out, err) = proc.communicate()
-
-#     if not "Insomnia" in out:
-#         print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
-#         print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
-#         print "How are you gonna drive a car if your driver is asleep?"
-#         sys.exit(0)
 
 # def main():
 #     global last_odometer_reset
@@ -797,12 +708,6 @@ def main():
 #         old_steering = steering
 #         old_throttle = throttle
 
-#         # Attempt to go at 30 fps. In reality, we could go slower if something hiccups.
-#         seconds = time.time() - loop_start_time
-#         while seconds < 1 / 30.:
-#             time.sleep(0.001)
-#             seconds = time.time() - loop_start_time
-#         frame_count += 1
 
 
 if __name__ == '__main__':
