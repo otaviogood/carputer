@@ -38,8 +38,7 @@ def print_info(message):
         Args:
             message (str): The message to be printed
     """
-    if verbose:
-        print("[%-20s][%s] %s" % (INFO, get_current_time(), str(message)))
+    print("[%-20s][%s] %s" % (INFO, get_current_time(), str(message)))
 
 def print_debug(message):
     """
@@ -58,8 +57,7 @@ def print_warning(message):
         Args:
             message (str): The message to be printed
     """
-    if verbose:
-        print("[%-20s][%s] %s" % (WARNING, get_current_time(), str(message)))
+    print("[%-20s][%s] %s" % (WARNING, get_current_time(), str(message)))
 
 def print_fatal(message):
     """
@@ -68,5 +66,4 @@ def print_fatal(message):
         Args:
             message (str): The message to be printed
     """
-    if verbose:
-        print("[%-20s][%s] %s" % (FATAL_ERROR, get_current_time(), str(message)))
+    print("[%-20s][%s] %s" % (FATAL_ERROR, get_current_time(), str(message)))
