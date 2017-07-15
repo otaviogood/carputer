@@ -44,15 +44,18 @@ import config
 #########################
 # TODO (GM): Clean this up yo
 is_running = True # main while loop boolean
-is_autonomous = False # Is tensorflow driving
-killswitch_engaged = False # Do we need to stop NOW
-engage_autonomous_driving = False # Should we drop into tensorflow driving?
-engage_killswitch = False # Should we stop NOW
+
 
 
 ################
 # Utility Belt #
 ################
+def clamp(value, min, max):
+    if(value < min):
+        return min
+    if(value > max):
+        return max
+    return value
 
 ###################
 # Setup functions #
@@ -100,9 +103,11 @@ def setup_serial_port(port_name, baudrate):
 
 def signal_handler(*args):
     dm.print_warning("Ctrl-c detected, closing...")
+    global is_running
     is_running = False
     sys.exit(0)
 signal.signal(signal.SIGINT, signal_handler)
+
 #############################
 # Data Processing functions #
 #############################
@@ -121,7 +126,12 @@ def make_data_folder(base_path):
     if not os.path.exists(session_full_path):
         os.makedirs(session_full_path)
     
-    return session_full_path    
+    return session_full_path    def clamp(value, min, max):
+    if(value < min):
+        return min
+    if(value > max):
+        return max
+    return value
 
 def init_data_logging(manual_dir, auto_dir):
     """Creates data logging directories and setups a dict for easy logging
@@ -136,6 +146,30 @@ def init_data_logging(manual_dir, auto_dir):
     }
 
     return logging_dict
+
+
+def log_data(steering, throttle, logging_dict, logging_type):
+    """ Log data to the logging dir specified
+    """
+    # Get the data to log
+    global start_time
+
+    session_full_path = logging_dict["dir_map"][logging_type]
+    frame_count = logging_dict["frame_count"]
+    milliseconds = logging_dict["milliseconds"]
+    frame = logging_dict["frame"]
+    odo_delta = logging_dict["odo_delta"]
+
+    # Log it
+    cv2.imwrite("%s/" % session_full_path +
+				"frame_" + str(frame_count).zfill(5) +
+				"_thr_" + str(throttle) +
+				"_ste_" + str(steering) +
+				"_mil_" + str(milliseconds) +
+				"_odo_" + str(odo_delta).zfill(5) +
+				".png", frame )
+
+
 ##########################
 # Tensorflow Functions   #
 ##########################
@@ -143,11 +177,77 @@ def init_data_logging(manual_dir, auto_dir):
 ##########################
 # Main driving functions #
 ##########################
+def send_vehicle_commands(steering, throttle, port):
+    """
+        Sends steering and throttle to the kart 
+    """
 
+    # Clamp steering
+    steering = clamp(steering, STEERING_MIN_VALUE, STEERING_MAX_VALUE)
+
+    # Clamp throttle
+    throttle = clamp(throttle, THORTTLE_MIN_VALUE, THORTTLE_MAX_VALUE)
+
+    # Encode data for Arduino
+    steering_out = ('S%d\n' % steering).encode('ascii')
+    throttle_out = ('T%d\n' % throttle).encode('ascii')
+
+    # Write
+    port.write(steering_out)
+    port.flush()
+    
+    port.write(throttle_out)
+    port.flush()
+
+def stop_vehicle(port):
+    """Sends a zero throttle and middle steering
+
+        TODO: Perhaps keep the last steering value so we don't flip the vehicle? Would that happen at high speeds?
+    """
+    send_vehicle_commands(90, 0, port)
+
+def drive_autonomously(session, net_model, car_port, logging_dict):
+    """Main autonomous driving function. recieves results from tensorflow and dispatchs it to the car_port
+    """
+    # # Get our steering and throttle values from tensorflow
+    # steering, throttle = do_tensorflow(session, net_model, logging_dict)
+
+    # Send those steering and throttle values over serial
+    send_vehicle_commands(steering, throttle, car_port)
+
+    # log data
+    log_data(steering, throttle, logging_dict, "auto")
+
+def drive_manually(steering, throttle, port, logging_dict):
+    # Arduino is expecting
+    # steering,throttle
+
+    # Map steering
+    #mapped_steering = int(map_to(steering, -1.0, 1.0, STEERING_MIN_VALUE, STEERING_MAX_VALUE))
+    # exp_steering = exponential_map_to(steering, 1.7)
+    # mapped_steering = int(map_to(exp_steering, -1.0, 1.0, STEERING_MIN_VALUE, STEERING_MAX_VALUE))
+
+    
+    # # Artifical "deadband" for Xbox 360 controller
+    # if mapped_steering <= 95 and mapped_steering >= 90:
+    #     mapped_steering = 90
+
+    # # Map throttle
+    # # Deadband throttle
+    # if throttle < -0.75:
+    #     throttle = -0.75
+    # mapped_throttle = int(map_to(throttle, -0.75, 1, THORTTLE_MIN_VALUE, THORTTLE_MAX_VALUE))
+
+    # Send these values over the serial port
+    send_vehicle_commands(mapped_steering, mapped_throttle, port)
+
+    # Log the values
+    log_data(mapped_steering, mapped_throttle, logging_dict, "manual")
 
 
 
 def main():
+    
     dm.print_info("Starting carputer...")
 
     dm.print_debug("Parsing command line arguments")
@@ -192,6 +292,12 @@ def main():
         dm.print_info("This is an autonomous run. Saving images to {}".format(logging_dir_map["auto"]))
     
 
+    # Main loop booleans
+    global is_running
+    is_autonomous = False # Is tensorflow driving
+    killswitch_engaged = False # Do we need to stop NOW
+    engage_autonomous_driving = False # Should we drop into tensorflow driving?
+    engage_killswitch = False # Should we stop NOW
 
     while is_running:
         # Start the loop timer
@@ -205,6 +311,27 @@ def main():
         # Read values from the arduino
         # steering, throttle, engage_killswitch, engage_autonomous_driving, reset_odo = process_arduino_inputs()
 
+
+        # Check for the engage auto button
+        if engage_autonomous_driving:
+            dm.print_info("Switching to autonomous mode")
+            is_autonomous = True
+        
+        # Check for killswitch
+        if engage_killswitch:
+            dm.print_warning("Killswitch engaged")
+            is_autonomous = False
+
+
+        # Branch for training data, teleop,  and autonomous
+        if record:
+            log_data(steering, throttle, logging_dict, "manual")
+        else:
+            if is_autonomous:
+                drive_autonomously(sess, net_model, car_port, logging_dict)
+            else:
+                drive_manually(steering, throttle, car_port, logging_dict)
+        
         # Display for debug
         # cv2.imshow("frame", logging_dict["frame"])
         # cv2.waitKey(1)
