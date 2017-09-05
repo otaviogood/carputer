@@ -1,10 +1,17 @@
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
+
 #include <Servo.h>
+
+Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
 Servo servo_steering;
 Servo servo_drive;
 
-volatile int rpmcount = 0;//see http://arduino.cc/en/Reference/Volatile .
-volatile int rpmTotal = 0;
+volatile int tickCount = 0;
+volatile int lastMilli = 0;
 
 const bool DEBUG = true;
 
@@ -40,7 +47,7 @@ void setup() {
   // reserve 200 bytes for the inputString:
   inputString.reserve(200);
 
-  Serial.begin(38400);//115200
+  Serial.begin(115200);//115200
 
   Serial.println("CarRace IOHub Setup BEGIN");
 
@@ -59,6 +66,8 @@ void setup() {
 
   if (ENABLE_DRIVE) {
     servo_drive.attach(PIN_PWM_DRIVE);
+    servo_drive.writeMicroseconds(1500);
+    delay(3000);
   }
 
   if (ENABLE_FAKE_HALL_SENSOR) {
@@ -72,6 +81,16 @@ void setup() {
   buttonState = digitalRead(buttonPin);
   Serial.print("Button\t");
   Serial.println(buttonState);
+
+  // Initialise the IMU
+  if(!bno.begin(Adafruit_BNO055::OPERATION_MODE_IMUPLUS))
+  {
+    // There was a problem detecting the BNO055 ... check your connections
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    //while(1);
+  }
+  delay(1000);
+  bno.setExtCrystalUse(true);
 }
 
 int loopCounter = 0;
@@ -89,6 +108,11 @@ void loop() {
       return;
     }
   }*/
+
+  imu::Quaternion quat = bno.getQuat();
+  imu::Vector<3> vAcc = bno.getVector(Adafruit_BNO055::VECTOR_LINEARACCEL);
+  imu::Vector<3> vGyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+
 
   buttonState = digitalRead(buttonPin);
 
@@ -178,15 +202,45 @@ void loop() {
     Serial.println(0);
   }
 
+  Serial.print("IMU ");
+  Serial.print(quat.x(), 4);
+  Serial.print(" ");
+  Serial.print(quat.y(), 4);
+  Serial.print(" ");
+  Serial.print(quat.z(), 4);
+  Serial.print(" ");
+  Serial.print(quat.w(), 4);
+  Serial.print(" ");
+  Serial.print(vGyro.x(), 4);
+  Serial.print(" ");
+  Serial.print(vGyro.y(), 4);
+  Serial.print(" ");
+  Serial.print(vGyro.z(), 4);
+  Serial.print(" ");
+  Serial.print(vAcc.x(), 4);
+  Serial.print(" ");
+  Serial.print(vAcc.y(), 4);
+  Serial.print(" ");
+  Serial.print(vAcc.z(), 4);
+  Serial.println("");
+
+  if (tickCount > 0) {
+    noInterrupts();
+    int tempM = lastMilli;
+    int tempCount = tickCount;
+    tickCount = 0;
+    interrupts();
+    for (int i = 0; i < tempCount; i++) {
+      Serial.print("Mil\t");
+      Serial.println(tempM);
+    }
+  }
 }
 
 // TODO Figure out Hall Effect sensor
 void rpm_increment() {
-  rpmcount++;
-  rpmTotal++;
-  int now = millis();
-  Serial.print("Mil\t");
-  Serial.println(now);
+  lastMilli = millis();
+  tickCount++;
 }
 
 /*

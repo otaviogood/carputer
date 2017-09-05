@@ -66,6 +66,7 @@ if not os.path.exists(output_path):
 # -------- Load all data --------
 train_data = TrainingData.fromfilename("train", args['--indir'])
 test_data = TrainingData.fromfilename("test", args['--indir'])
+print("In dir: {}".format(args["--indir"]))
 
 numTest = 2000
 skipTest = 4
