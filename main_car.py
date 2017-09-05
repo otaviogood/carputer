@@ -81,12 +81,12 @@ def setup_serial_and_reset_arduinos():
 		name_in = 'COM3'
 		name_out = 'COM4'
 	else:
-		name_in = '/dev/tty.usbmodem14231'  # 5v Arduino Uno (16 bit)
+		name_in = '/dev/tty.usbmodem14211'  # 5v Arduino Uno (16 bit)
 		name_out = '/dev/tty.usbmodem14221'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
-	port_out = serial.Serial(name_out, 38400, timeout=0.0)
+	port_out = serial.Serial(name_out, 115200, timeout=0.0)
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
@@ -145,6 +145,13 @@ def process_input(port_in, port_out):
 			sp = line.split('\t')
 			milliseconds = int(sp[1])
 			odometer_ticks += 1
+		if line[0:3] == 'IMU':
+			# quat.xyzw, gyro.xyz, acc.xyz
+			# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+			sp = line.split(' ')
+			quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+			gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+			accel = [float(sp[8]), float(sp[9]), float(sp[10])]
 		if line[0:6] == 'Button':
 			sp = line.split('\t')
 			button_arduino_out = int(sp[1])
@@ -153,7 +160,7 @@ def process_input(port_in, port_out):
 
 def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Adjust the steering and throttle.
-	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 110)
+	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 130)
 	# Update steering
 	if old_steering != steering:
 		port_out.write(('S%d\n' % steering).encode('ascii'))
@@ -165,6 +172,26 @@ def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Write all.
 	port_out.flush()
 
+
+def stop_car(steering, throttle, port_out):
+
+	# Send 90
+	process_output(-1, -1, 90, 0, port_out)
+	time.sleep(0.016)
+
+	# Send 0 # Full brake
+	process_output(-1, -1, 90, 90, port_out)
+	time.sleep(0.016)
+
+	# Send 90 to reset esc
+	process_output(-1, -1, 90, 0, port_out)
+	time.sleep(0.016)
+
+def center_esc(port_out):
+	# 90 Throttle centers the esc 
+	process_output(-1, -1, 90, 90, port_out)
+
+	#process_output(-1, -1, steering, throttle, port_out)
 
 def invert_log_bucket(a):
 	# Reverse the function that buckets the steering for neural net output.
@@ -227,7 +254,6 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 	batch = TrainingData.FromRealLife(resized, odo_ticks, vel)
 	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_pred], feed_dict=batch.FeedDict(net_model))
 	steer_regression += 90
-	throttle_regression += 90
 
 	# Get to potentiometer
 	# steer_regression = config.TensorflowToSteering(steer_regression)
@@ -350,6 +376,10 @@ def main():
 	drive_start_time = time.time()
 	print 'Awaiting switch flip..'
 
+	if we_are_autonomous:
+		print("Warning, we are intending to drive with tensorflow")
+
+
 	while True:
 		loop_start_time = time.time()
 
@@ -357,9 +387,9 @@ def main():
 		if last_switch != button_arduino_out:
 			last_switch = button_arduino_out
 			# See if the car started up with the switch already flipped.
-			if time.time() - drive_start_time < 1:
-				print 'Error: start switch in the wrong position.'
-				sys.exit()
+			# if time.time() - drive_start_time < 1:
+			# 	print 'Error: start switch in the wrong position.'
+			# 	sys.exit()
 
 			if button_arduino_out == 1:
 				currently_running = True
@@ -378,6 +408,7 @@ def main():
 					print("DRIVING AUTONOMOUSLY (not recording).")
 			else:
 				print("%s: Switch flipped. Recording stopped." % frame_count)
+				override_autonomous_control = False
 				currently_running = False
 
 		# Read input data from arduinos.
@@ -400,6 +431,7 @@ def main():
 	        if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
 			    old_aux1 = aux1
 			    print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
+			    center_esc(port_out)
 			    override_autonomous_control = False
 
 		# Check to see if we should reset the odometer via aux1 during manual
@@ -446,11 +478,14 @@ def main():
 		if override_autonomous_control:
 			# Full brake and neutral steering.
 			throttle, steering = 0, 90
+			#print("Sending kill command to car")
+			stop_car(steering, throttle, port_out)
 
-		# Send output data to arduinos.
-		process_output(old_steering, old_throttle, steering, throttle, port_out)
-		old_steering = steering
-		old_throttle = throttle
+		else:
+			# Send output data to arduinos.
+			process_output(old_steering, old_throttle, steering, throttle, port_out)
+			old_steering = steering
+			old_throttle = throttle
 
 		# Attempt to go at 30 fps. In reality, we could go slower if something hiccups.
 		seconds = time.time() - loop_start_time

@@ -60,3 +60,14 @@ and the car will attempt to drive on its own
 ### Hardware setup
 Updates - We no longer use the IMUs and we're no longer trying to run the NVidia TX1 computer. Macbook works better.
 ![Wiring diagram](https://github.com/otaviogood/carputer/blob/master/CarDiagram.jpg "Wiring diagram")
+
+
+## Updated Setup for ESC not saving the mode
+0. Plug in LiPo Battery
+0. Plug in USB
+0. Turn on RC Transmitter
+0. Start main_car script
+0. Program ESC for race mode
+  - TODO: Add details for this
+0. Drive
+
