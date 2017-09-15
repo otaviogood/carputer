@@ -145,20 +145,18 @@ def draw_softmax_distribution(outfile, label, softmax, gt, draw_zero_point=False
     encode_image_as_html(outfile, soft_img, 'PNG', 'style="position:absolute"')
     outfile.write(label + '</div><br/>')
 
-def write_html_image(outfile, result_steering, result_throttle, test_data, w, h, message, im_id, steering_softmax, throttle_softmax, steering_regress, throttle_regress):
+def write_html_image(outfile, test_data, w, h, message, im_id, steering_regress, throttle_regress):
     images = test_data.pic_array[im_id]
-    answers = test_data.steer_onehot_array[im_id]
-    answers_throttle = test_data.throttle_onehot_array[im_id]
-    steering_gt = argmax(answers)
-    throttle_gt = argmax(answers_throttle)
+    steer_gt = test_data.steer_array[im_id]
+    throttle_gt = test_data.throttle_array[im_id]
 
     # pulse_entropy = np.sum( np.multiply(pulse_softmax, np.log(np.reciprocal(pulse_softmax))) )
 
     # Fade color from green to yellow to red and make a table cell with that background color.
     # (40, 88, 136, 184, 232, 280)
     # (400,352,304, 256, 208, 160, 112, 64, 16)
-    delta = abs(steering_gt - result_steering)
-    shade = 'rgb(%s, %s, %s)' % (min(232, delta * 52 + 20), max(0, min(255-32, 448 - delta * 48)), min(80, delta * 80))
+    # delta = abs(steering_gt - result_steering)
+    # shade = 'rgb(%s, %s, %s)' % (min(232, delta * 52 + 20), max(0, min(255-32, 448 - delta * 48)), min(80, delta * 80))
     #remap entropy to around [0..1] range.
     # ent01 = min(1.0, max(0.0, pulse_entropy * 0.5 - 0.1))
     # shade = 'rgb(%s, %s, %s)' % (min(255,int(ent01 * 255*2)), max(0,int((2.0-ent01*2.0) * 255)), 64)
@@ -177,45 +175,20 @@ def write_html_image(outfile, result_steering, result_throttle, test_data, w, h,
     #write_html_image_tensor_gray_overlay(outfile, latlon_softmax.reshape((15, 15))*255, 9, "", "", 1.0)
     #outfile.write('<svg height="128" width="128" style="position:absolute;top:2px;left:138px"><circle cx="' + str(gt_lon * 128 / 15 + 7) + '" cy="' + str(gt_lat * 128 / 15 + 7) + '" r="4" stroke="black" stroke-width="1" fill="yellow" /></svg>')
     write_steering_line(outfile, -steering_regress * 1, 'rgb(240, 55, 40)', 7)
-    write_steering_line(outfile, -(steering_gt - 7) * 7, 'rgb(40, 255, 40)', 5)
-    write_steering_line(outfile, -(result_steering - 7) * 7)
-    # write_vertical_meter(outfile, throttle_gt, total, 'rgb(40, 255, 40)')
-    # write_vertical_meter(outfile, throttle_net, total)
+    write_vertical_meter(outfile, throttle_gt, 16, 'rgb(40, 255, 40)')
+    write_vertical_meter(outfile, throttle_regress, 16)
     outfile.write('</span>')
 
-    # Draw *steering* softmax distribution to a png
-    draw_softmax_distribution(outfile, 'Steer softmax', steering_softmax, steering_gt)
-
-    # Draw *throttle* softmax distribution to a png
-    draw_softmax_distribution(outfile, 'Throttle softmax', throttle_softmax, throttle_gt, True)
-
-    # Draw *pulse* softmax distribution to a png
-    # soft_img = Image.new('RGBA', (128, 32), (0, 0, 0, 64))
-    # draw = ImageDraw.Draw(soft_img)
-    # soft_size = pulse_softmax.shape[0]
-    # scale = (soft_img.width / soft_size)
-    # for i in range(soft_size):
-    #     fill_color = (255, 255, 255, 255)
-    #     # if i == throttle_gt: fill_color = (0, 255, 0, 255)
-    #     prob = pulse_softmax[i]
-    #     draw.rectangle(
-    #         [i * scale, soft_img.height - round(prob * soft_img.height), i * scale + scale - 2, soft_img.height],
-    #         fill_color)
-    # outfile.write('<div style="position:relative;padding-bottom:4px">')
-    # encode_image_as_html(outfile, soft_img, 'PNG', 'style="position:absolute"')
-    # outfile.write('Odometer softmax</div><br/>')
-
     # Print out throttle, steering, and odometer values.
-    outfile.write('T: ' + str(throttle_gt) + '&nbsp;&nbsp; NT: ' + str(result_throttle) + '<br/>')
-    outfile.write('S: ' + str(steering_gt) + '&nbsp;&nbsp; NS: ' + str(result_steering) + '<br/>')
-    outfile.write('regress: ' + str(int(steering_regress)) + ' ' + str(int(throttle_regress)) + '<br/>')
+    outfile.write('<br/>regress: ' + str(int(steering_regress)) + ' ' + str(int(throttle_regress)) + '<br/>')
+    outfile.write('gt: ' + str(int(steer_gt)) + ' ' + str(int(throttle_gt)) + '<br/>')
     # outfile.write('ent: ' + str(pulse_entropy))
     outfile.write('</td>')
 
 
-def write_html(output_path, test_data, results_steering, results_throttle, graph, sess, steering_softmax_batch, throttle_softmax_batch, results_steering_regress, results_throttle_regress, net_model):
+def write_html(output_path, test_data, graph, sess, results_steering_regress, results_throttle_regress, net_model):
     # copyfile("track_extents_white.png", os.path.join(output_path, "track_extents_white.png"))
-    image_count = len(results_steering)
+    image_count = len(results_steering_regress)
     image_count = min(1000, image_count)
     outfile = open(os.path.join(output_path, "debug.html"), "w")
     outfile.write("""
@@ -286,15 +259,15 @@ def write_html(output_path, test_data, results_steering, results_throttle, graph
         if (i % 16) == 0:
             outfile.write('</tr>')
             outfile.write('<tr>')
-        write_html_image(outfile, results_steering[i], results_throttle[i], test_data, net_model.width, net_model.height, "blank", i,
-                         steering_softmax_batch[i], throttle_softmax_batch[i], results_steering_regress[i], results_throttle_regress[i])
+        write_html_image(outfile, test_data, net_model.width, net_model.height, "blank", i,
+                         results_steering_regress[i], results_throttle_regress[i])
     outfile.write('</tr>')
     outfile.write('</table><br/><br/>')
 
     outfile.write("<div style='position:relative'>")
     write_html_image(
-        outfile, results_steering[0], results_throttle[0], test_data, net_model.width, net_model.height, "blank2", 0,
-        steering_softmax_batch[0], throttle_softmax_batch[0], results_steering_regress[0], results_throttle_regress[0])
+        outfile, test_data, net_model.width, net_model.height, "blank2", 0,
+        results_steering_regress[0], results_throttle_regress[0])
     outfile.write('</div>')
     # write_html_image_RGB(outfile, all_xs[0], width, height)
     # viz = sess.run(W)

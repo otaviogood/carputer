@@ -34,7 +34,7 @@ and the car will attempt to drive on its own
 
 0. convert TRAINING images to np arrays: `python NeuralNet/filemash.py /path/to/data` (Can be multiple paths)
 0. convert TEST images to np arrays: `python NeuralNet/filemash.py /path/to/data --gen_test` (Can be multiple paths)
-0. train a model: `python NeuralNet/convnet02.py`
+0. train a model: `python NeuralNet/convnet02.py`. Train for minimum 1500 iterations, ideally around 5000 iterations.
 0. use this model to drive the car (see above)
 
 
@@ -47,16 +47,21 @@ and the car will attempt to drive on its own
 
 ### Hardware TODOs
 
-- [ ] Make the car drive slower. Smaller wheels? Smaller batteries?
+- [ ] Fix the radio control dropped signal error
+- [ ] Get the TX1 working
+- [ ] Get the IMU recording data
 
 
 ### Software TODOs
 
 - [ ] Fix keepalive on Arduino
-- [ ] Debug crowded autonomous runs with lots of people standing around throwing off the neural net
-- [ ] Fix the kill switch so it locks brakes instead of coasting. Just a logic bug I think.
 - [ ] Look into remote SSH type software so we don't have to keep popping open the car.
 
 ### Hardware setup
 Updates - We no longer use the IMUs and we're no longer trying to run the NVidia TX1 computer. Macbook works better.
 ![Wiring diagram](https://github.com/otaviogood/carputer/blob/master/CarDiagram.jpg "Wiring diagram")
+
+## Simulator
+
+Work in progress, of course. The simulator runs in Unity. I didn't check in the lighting files because they are big, but if you build lighting, it should look like this...
+![Unity sim](https://github.com/otaviogood/carputer/blob/master/warehouse_sim.jpg "Unity sim")

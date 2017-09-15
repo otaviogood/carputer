@@ -41,12 +41,12 @@ def RandRects(source):
     w = source.width
     h = source.height
     draw = ImageDraw.Draw(source)
-    for i in xrange(6):
+    for i in xrange(random.randint(0, 32)):
         rs = np.random.rand(4)
         rc = np.random.randn(3) * 0.3
         rc = np.clip(rc, -1.0, 1.0) * 127 + 127
         draw.rectangle([(rs[0]*1.4-0.2)*w, (rs[1]*1.4-0.2)*h, (rs[0]*1.4-0.2)*w + rs[2]*40, (rs[1]*1.4-0.2)*h + rs[3]*40], fill=(int(rc[0]), int(rc[1]), int(rc[2])))
-    # draw.rectangle([0, 80, 128, 128], fill=(0, 32, 0))
+    # draw.rectangle([0, 0, 128, 64], fill=(128, 128, 128))
 
 
 def WhiteUnbalance(source):

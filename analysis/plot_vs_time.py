@@ -11,6 +11,7 @@ Options:
 """
 
 import os
+import pprint
 
 from docopt import docopt
 import matplotlib.pyplot as plt
@@ -49,8 +50,14 @@ for filename in filenames:
   }
   parsed_data.append(data)
 
+# sort by frame otherwise the graph will be all over the place.
+parsed_data = sorted(parsed_data, key=lambda x: x['frame'])
+# parsed_data = parsed_data[:1500]
+print len(parsed_data)
+
 # Setup x-values (time in seconds).
 x_values = [int(d['millis']) / 1000. for d in parsed_data]
+#pprint.pprint([d for d in parsed_data])
 
 # Plot each parameter.
 labels = [
