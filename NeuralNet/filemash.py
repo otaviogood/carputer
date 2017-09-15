@@ -12,22 +12,16 @@ Examples:
   python filemash.py /my/training/data ~/my/other/data
 """
 
-import urllib2
-import glob
 import os.path
-import os
 import math
-import random
-from StringIO import StringIO
 from docopt import docopt
-import numpy as np
 from PIL import Image
 import Warp
 import numpy as np
+import collections
 
 import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-import manual_throttle_map
 import config
 
 # Parse args.
@@ -72,6 +66,34 @@ def ParseGoodFloat(s):
         return 0.0
 
 
+# Fix places where our crappy remote control is dropping signal. Hacky.
+def FixBadSignal(arr, index):
+    if index <= 1: return False
+    if index >= len(arr) - 2: return False
+    a = arr[index - 1]
+    b = arr[index]
+    c = arr[index + 1]
+    da = abs(b-a)
+    db = abs(c-b)
+    if (da > 45) and (db > 45) and (b < a) and (b < c):
+        arr[index] = arr[index - 1]
+        print("fixed: " + str(index) + "  " + str(a) + " " + str(b) + " " + str(c))
+
+def FixVeryBadSignal(arr, index):
+    if index <= 2: return False
+    if index >= len(arr) - 3: return False
+    a = arr[index - 1]
+    b = arr[index]
+    c = arr[index + 1]
+    d = arr[index + 2]
+    da = abs(b-a)
+    db = abs(d-c)
+    if (da > 45) and (db > 45) and (b < a) and (c < d):
+        arr[index] = arr[index - 1]
+        arr[index + 1] = arr[index + 2]
+        print("fixed bad: " + str(index) + "  " + str(a) + " " + str(b) + " " + str(c) + " " + str(d))
+
+
 # True for training data generation, False for test data generation
 def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_medfilt=None):
 
@@ -84,6 +106,7 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
     all_vels = []
     last_odo = 0
     last_millis = 0
+    c = collections.Counter()
 
     for i in xrange(len(allNames)):
         name = allNames[i]
@@ -131,6 +154,18 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
 
         all_odos.append(temp_odo)
         all_vels.append(vel)
+
+    # Fix places where our crappy remote control is dropping signal. Hacky.
+    for i in xrange(len(allNames)):
+        FixBadSignal(all_throttle, i)
+        FixVeryBadSignal(all_throttle, i)
+        FixBadSignal(all_steering, i)
+        FixVeryBadSignal(all_steering, i)
+    for i in xrange(len(allNames)):
+        if i > 2:
+            delta = abs(int(all_throttle[i-1]) - int(all_throttle[i]))
+            c.update({delta : 1})
+    print c
 
     # Save data.
     outpath = os.path.expanduser(args['--outdir'])
