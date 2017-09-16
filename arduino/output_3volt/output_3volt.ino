@@ -41,12 +41,15 @@ boolean stringComplete = false;  // whether the string is complete
 // Button stuff
 const int BUTTON_PIN = 53;
 int buttonState = 0;
-int oldButtonState = 0;
+int lastButtonState = 0;
+unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
 
 void setup() 
 {
   // Button setup
-  pinMode(BUTTON_PIN, INPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  //pinMode(BUTTON_PIN, INPUT);
 
   // String setup
   inputString.reserve(200); // reserve 200 bytes for the inputString:
@@ -84,14 +87,7 @@ void setup()
 void loop() 
 {
   int now = millis();
-  buttonState = digitalRead(BUTTON_PIN);
-
-  if (oldButtonState != buttonState)
-  {
-    Serial.print("Button\t");
-    Serial.println(buttonState);
-  }
-  oldButtonState = buttonState;
+  checkButtonPin();
 
   bool driveUpdated = false;
   bool steerUpdated = false;
@@ -206,7 +202,32 @@ void readIMU()
     Serial.print(vAcc.z(), 4);
     Serial.println("");
   }
- }
+}
+
+
+void checkButtonPin()
+{
+  int reading = digitalRead(BUTTON_PIN);
+  if(reading != lastButtonState)
+  {
+    lastDebounceTime = millis();
+  }
+
+  double delta = (millis() - lastDebounceTime);
+  if(delta > debounceDelay)
+  {
+    if(reading != buttonState)
+    {
+      buttonState = reading;
+      Serial.print("Button\t");
+      Serial.println(buttonState);
+    }
+  }
+
+  lastButtonState = reading;
+}
+
+
 /*
   SerialEvent occurs whenever a new data comes in the
  hardware serial RX.  This routine is run between each
