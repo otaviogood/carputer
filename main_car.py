@@ -134,6 +134,7 @@ def process_input(port_in, port_out):
 		print("Mysterious serial port error. Let's pretend it didn't happen. :)")
 	# Init steering, throttle and aux1.
 	steering, throttle, aux1 = None, None, None
+	telemetry = None
 	# Read lines from input Arduino
 	while '\n' in buffer_in:
 		line, buffer_in = buffer_in.split('\n', 1)
@@ -154,12 +155,23 @@ def process_input(port_in, port_out):
 			milliseconds = int(sp[1])
 			odometer_ticks += 1
 		if line[0:3] == 'IMU':
-			# quat.xyzw, gyro.xyz, acc.xyz
-			# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
-			sp = line.split(' ')
-			quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
-			gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
-			accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+            # quat.xyzw, gyro.xyz, acc.xyz
+            # IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+            sp = line.split(' ')
+            try:
+                quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+            except:
+                quat = [0.0, 0.0, 0.0, 0.0]
+            try:
+                gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+            except:
+                gyro = [0.0, 0.0, 0.0]
+            try:
+                accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+            except:
+                accel = [0.0, 0.0, 0.0]
+            
+            telemetry = quat + gyro + accel
 		if line[0:6] == 'Button':
 			sp = line.split('\t')
 			button_arduino_out = int(sp[1])
@@ -353,6 +365,7 @@ def check_for_insomnia():
 def main():
 	global last_odometer_reset
 	# Init some vars..
+	telemetry = []
 	old_steering = 0
 	old_throttle = 0
 	old_aux1 = 0
@@ -420,7 +433,7 @@ def main():
 				currently_running = False
 
 		# Read input data from arduinos.
-		new_steering, new_throttle, new_aux1, button_arduino_in, button_arduino_out = (
+		new_steering, new_throttle, new_aux1, button_arduino_in, button_arduino_out, telemetry = (
 			process_input(port_in, port_out))
 		if new_steering != None:
 			steering = new_steering
@@ -428,6 +441,7 @@ def main():
 			throttle = new_throttle
 		if new_aux1 != None:
 			aux1 = new_aux1
+		
 
 		# Check to see if we should stop the car via the RC during TF control.
 		# But also provide a way to re-engage autonomous control after an override.
@@ -482,6 +496,11 @@ def main():
 		else:
 			frame = camera_stream.read()
 			cv2.imwrite('/tmp/test.png', frame)
+
+		if telemetry is not None:
+			frames = [str(frame_count).zfill(5)]
+			telemetry = frames + telemetry
+			dm.log_data(telemetry)
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.
