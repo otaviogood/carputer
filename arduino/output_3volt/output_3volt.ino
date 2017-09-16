@@ -163,7 +163,9 @@ void readIMU()
     /* Get the system status values (mostly for debugging purposes) */
   uint8_t system_status, self_test_results, system_error;
   system_status = self_test_results = system_error = 0;
-  bno.getSystemStatus(&system_status, &self_test_results, &system_error);
+
+  // Removed this because it is a long read
+  //bno.getSystemStatus(&system_status, &self_test_results, &system_error);
 
   // Check the system status
   // If 255 or 1, error
