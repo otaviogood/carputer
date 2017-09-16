@@ -88,19 +88,20 @@ def setup_serial_and_reset_arduinos():
 		name_out = 'COM4'
 	else:
 		name_in = '/dev/tty.usbmodem14211'  # 5v Arduino Uno (16 bit)
-		name_out = '/dev/tty.usbmodem14221'  # 3.3v Arduino Due (32 bit)
+		name_out = '/dev/tty.usbmodem14231'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
 	port_out = serial.Serial(name_out, 115200, timeout=0.0)
 
-	imu_port = serial.Serial(COM5, 115200, timeout=0.0)
+	imu_port = serial.Serial('/dev/tty.usbmodem14241', 115200, timeout=0.0)
 	
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
+	imu_port.flush()
 	print("Serial setup complete.")
-	return port_in, port_out
+	return port_in, port_out, imu_port
 
 
 def make_data_folder(base_path):
@@ -440,6 +441,7 @@ def main():
 	if we_are_autonomous:
 		print("Warning, we are intending to drive with tensorflow")
 
+	session_full_path = make_data_folder('~/training-images')
 
 	while True:
 		loop_start_time = time.time()
@@ -457,7 +459,7 @@ def main():
 				print '%s: Switch flipped.' % frame_count
 				last_odometer_reset = odometer_ticks
 				if we_are_recording and (not we_are_autonomous):
-					session_full_path = make_data_folder('~/training-images')
+					
 					print 'STARTING TO RECORD.'
 					print 'Folder: %s' % session_full_path
 					config.store('last_record_dir', session_full_path)
@@ -542,7 +544,7 @@ def main():
 		if telemetry is not None:
 			frames = [str(frame_count).zfill(5)]
 			telemetry = frames + telemetry
-			dm.log_data(telemetry)
+			data_logger.log_data(telemetry)
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.
