@@ -72,6 +72,8 @@ odometer_ticks = 0
 button_arduino_out = 0
 button_arduino_in = 0
 
+imu_stream = ''
+
 
 def setup_serial_and_reset_arduinos():
 	# This will set up the serial ports. If they are already set up, it will
@@ -91,6 +93,9 @@ def setup_serial_and_reset_arduinos():
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
 	port_out = serial.Serial(name_out, 115200, timeout=0.0)
+
+	imu_port = serial.Serial(COM5, 115200, timeout=0.0)
+	
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
@@ -110,6 +115,40 @@ def make_data_folder(base_path):
 	if not os.path.exists(session_full_path):
 		os.makedirs(session_full_path)
 	return session_full_path
+
+def process_imu(imu_port):
+
+	global imu_stream
+	try:
+		imu_stream += imu_port.read(imu_port.in_waiting).decode('ascii')
+
+	except UnicodeDecodeError:
+		imu_stream = ''
+		print("Imu stream read error")
+	telemetry = None
+
+	while '\n' in imu_stream:
+		line, imu_stream = imu_stream.split('\n', 1)
+		if line[0:3] == 'IMU':
+            # quat.xyzw, gyro.xyz, acc.xyz
+            # IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+            sp = line.split(' ')
+            try:
+                quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+            except:
+                quat = [0.0, 0.0, 0.0, 0.0]
+            try:
+                gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+            except:
+                gyro = [0.0, 0.0, 0.0]
+            try:
+                accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+            except:
+                accel = [0.0, 0.0, 0.0]
+            
+            telemetry = quat + gyro + accel
+	return telemetry
+
 
 
 def process_input(port_in, port_out):
@@ -155,23 +194,24 @@ def process_input(port_in, port_out):
 			milliseconds = int(sp[1])
 			odometer_ticks += 1
 		if line[0:3] == 'IMU':
+			pass
             # quat.xyzw, gyro.xyz, acc.xyz
             # IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
-            sp = line.split(' ')
-            try:
-                quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
-            except:
-                quat = [0.0, 0.0, 0.0, 0.0]
-            try:
-                gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
-            except:
-                gyro = [0.0, 0.0, 0.0]
-            try:
-                accel = [float(sp[8]), float(sp[9]), float(sp[10])]
-            except:
-                accel = [0.0, 0.0, 0.0]
+            # sp = line.split(' ')
+            # try:
+            #     quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+            # except:
+            #     quat = [0.0, 0.0, 0.0, 0.0]
+            # try:
+            #     gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+            # except:
+            #     gyro = [0.0, 0.0, 0.0]
+            # try:
+            #     accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+            # except:
+            #     accel = [0.0, 0.0, 0.0]
             
-            telemetry = quat + gyro + accel
+            # telemetry = quat + gyro + accel
 		if line[0:6] == 'Button':
 			sp = line.split('\t')
 			button_arduino_out = int(sp[1])
@@ -191,6 +231,7 @@ def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	port_out.write(('keepalive\n').encode('ascii'))
 	# Write all.
 	port_out.flush()
+
 
 
 def stop_car(steering, throttle, port_out):
@@ -388,7 +429,7 @@ def main():
 		check_for_insomnia()
 
 	# Setup ports.
-	port_in, port_out = setup_serial_and_reset_arduinos()
+	port_in, port_out, imu_port = setup_serial_and_reset_arduinos()
 
 	# Setup tensorflow
 	sess, net_model = setup_tensorflow()
@@ -433,7 +474,7 @@ def main():
 				currently_running = False
 
 		# Read input data from arduinos.
-		new_steering, new_throttle, new_aux1, button_arduino_in, button_arduino_out, telemetry = (
+		new_steering, new_throttle, new_aux1, button_arduino_in, button_arduino_out = (
 			process_input(port_in, port_out))
 		if new_steering != None:
 			steering = new_steering
@@ -441,6 +482,8 @@ def main():
 			throttle = new_throttle
 		if new_aux1 != None:
 			aux1 = new_aux1
+
+		telemetry = process_imu(imu_port)
 		
 
 		# Check to see if we should stop the car via the RC during TF control.
