@@ -130,23 +130,22 @@ def process_imu(imu_port):
 	while '\n' in imu_stream:
 		line, imu_stream = imu_stream.split('\n', 1)
 		if line[0:3] == 'IMU':
-            # quat.xyzw, gyro.xyz, acc.xyz
-            # IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
-            sp = line.split(' ')
-            try:
-                quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
-            except:
-                quat = [0.0, 0.0, 0.0, 0.0]
-            try:
-                gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
-            except:
-                gyro = [0.0, 0.0, 0.0]
-            try:
-                accel = [float(sp[8]), float(sp[9]), float(sp[10])]
-            except:
-                accel = [0.0, 0.0, 0.0]
-            
-            telemetry = quat + gyro + accel
+			# quat.xyzw, gyro.xyz, acc.xyz
+			# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+			sp = line.split(' ')
+			try:
+				quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+			except:
+				quat = [0.0, 0.0, 0.0, 0.0]
+			try:
+				gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+			except:
+				gyro = [0.0, 0.0, 0.0]
+			try:
+				accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+			except:
+				accel = [0.0, 0.0, 0.0]
+			telemetry = quat + gyro + accel
 	return telemetry
 
 
@@ -195,23 +194,23 @@ def process_input(port_in, port_out):
 			odometer_ticks += 1
 		if line[0:3] == 'IMU':
 			pass
-            # quat.xyzw, gyro.xyz, acc.xyz
-            # IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
-            # sp = line.split(' ')
-            # try:
-            #     quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
-            # except:
-            #     quat = [0.0, 0.0, 0.0, 0.0]
-            # try:
-            #     gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
-            # except:
-            #     gyro = [0.0, 0.0, 0.0]
-            # try:
-            #     accel = [float(sp[8]), float(sp[9]), float(sp[10])]
-            # except:
-            #     accel = [0.0, 0.0, 0.0]
-            
-            # telemetry = quat + gyro + accel
+						# quat.xyzw, gyro.xyz, acc.xyz
+						# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+						# sp = line.split(' ')
+						# try:
+						#     quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+						# except:
+						#     quat = [0.0, 0.0, 0.0, 0.0]
+						# try:
+						#     gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+						# except:
+						#     gyro = [0.0, 0.0, 0.0]
+						# try:
+						#     accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+						# except:
+						#     accel = [0.0, 0.0, 0.0]
+						
+						# telemetry = quat + gyro + accel
 		if line[0:6] == 'Button':
 			sp = line.split('\t')
 			button_arduino_out = int(sp[1])
@@ -275,34 +274,34 @@ def invert_log_bucket(a):
 # Tensorflow Functions   #
 ##########################
 def setup_tensorflow():
-    """Restores a tensorflow session and returns it if successful
-    """
-    net_model = NNModel()
+		"""Restores a tensorflow session and returns it if successful
+		"""
+		net_model = NNModel()
 
-    tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
-    sess = tf.Session(config=tf_config)
+		tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
+		sess = tf.Session(config=tf_config)
 
-    # Add ops to save and restore all of the variables
-    saver = tf.train.Saver()
+		# Add ops to save and restore all of the variables
+		saver = tf.train.Saver()
 
-    # Load the model checkpoint file
-    try:
-        tmp_file = config.tf_checkpoint_file
-        print("Loading model from config: {}".format(tmp_file))
-    except:
-		tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
-		print "loading latest trained model: " + str(tmp_file)
-        # print("CAN'T FIND THE GOOD MODEL")
-        # sys.exit(-1)
+		# Load the model checkpoint file
+		try:
+				tmp_file = config.tf_checkpoint_file
+				print("Loading model from config: {}".format(tmp_file))
+		except:
+			tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
+			print "loading latest trained model: " + str(tmp_file)
+				# print("CAN'T FIND THE GOOD MODEL")
+				# sys.exit(-1)
 
-    # Try to restore a session
-    try:
-        saver.restore(sess, tmp_file)
-    except:
-        print("Error restoring TF model: {}".format(tmp_file))
-        # sys.exit(-1)
+		# Try to restore a session
+		try:
+				saver.restore(sess, tmp_file)
+		except:
+				print("Error restoring TF model: {}".format(tmp_file))
+				# sys.exit(-1)
 
-    return sess, net_model
+		return sess, net_model
 
 def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 	# Resize our image from the car
@@ -393,15 +392,15 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 
 # This checks that we are running the program that allows us to close the lid of our mac and keep running.
 def check_for_insomnia():
-    print("Checking for Insomnia (necessary for everything to work during lid close)")
-    proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
-    (out, err) = proc.communicate()
+		print("Checking for Insomnia (necessary for everything to work during lid close)")
+		proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
+		(out, err) = proc.communicate()
 
-    if not "Insomnia" in out:
-		print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
-		print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
-		print "How are you gonna drive a car if your driver is asleep?"
-		sys.exit(0)
+		if not "Insomnia" in out:
+			print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
+			print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
+			print "How are you gonna drive a car if your driver is asleep?"
+			sys.exit(0)
 
 def main():
 	global last_odometer_reset
@@ -493,11 +492,11 @@ def main():
 				if not override_autonomous_control:
 					print '%s: Detected RC override: stopping.' % frame_count
 					override_autonomous_control = True
-	        if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
-			    old_aux1 = aux1
-			    print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
-			    center_esc(port_out)
-			    override_autonomous_control = False
+					if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
+						old_aux1 = aux1
+						print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
+						center_esc(port_out)
+						override_autonomous_control = False
 
 		# Check to see if we should reset the odometer via aux1 during manual
 		# driving. This is Button E on the RC transmitter.
