@@ -24,6 +24,10 @@ import key_watcher
 
 import manual_throttle_map
 
+# Data logging
+import debug_message as dm
+data_logger = dm.DebugMessage(verbose=True, enable_logging=True)
+
 # Kartputer modules
 main_car_directory = os.path.dirname(os.path.realpath(__file__))
 carputer_directory = os.path.dirname(main_car_directory)
@@ -99,6 +103,10 @@ def make_data_folder(base_path):
 	base_path = os.path.expanduser(base_path)
 	session_dir_name = time.strftime('%Y_%m_%d__%H_%M_%S_%p')
 	session_full_path = os.path.join(base_path, session_dir_name)
+
+	logging_path = session_full_path + "_imu.log"
+	data_logger.init_logging(logging_path)
+
 	if not os.path.exists(session_full_path):
 		os.makedirs(session_full_path)
 	return session_full_path
