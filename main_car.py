@@ -313,8 +313,10 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 
 	# Setup the data and run tensorflow
 	batch = TrainingData.FromRealLife(resized, odo_ticks, vel)
-	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_pred], feed_dict=batch.FeedDict(net_model))
+	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_regress_result], feed_dict=batch.FeedDict(net_model))
 	steer_regression += 90
+	throttle_regression += 90
+	# print(throttle_regression)
 
 	# Get to potentiometer
 	# steer_regression = config.TensorflowToSteering(steer_regression)
@@ -523,6 +525,12 @@ def main():
 			# Read a frame from the camera.
 			frame = camera_stream.read()
 			steering, throttle = do_tensorflow(sess, net_model, frame, odometer_ticks - last_odometer_reset, vel)
+			if ((frame_count % 25) == 0) and (vel != 0):
+				# Simulate dropped radio frames from  rc
+				#throttle = 0
+				pass
+				
+
 			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
 		if we_are_recording and currently_running:
