@@ -131,7 +131,7 @@ class NNModel:
         # Add regression loss to cross entropy loss and regularizers. Arbitrary scalars to balance out the 3 things and give regression steering priority
         # self.squared_diff = tf.reduce_mean(tf.squared_difference(self.steering_regress_result, self.steering_regress_))
         # self.squared_diff = tf.squared_difference(self.steering_regress_result, self.steering_regress_)
-        self.loss = 0.001 * self.regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*5.0
+        self.loss = 0.001 * self.regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*2.0
         tf.summary.scalar('loss', self.loss)
         # -----------------------------------------------------------------------------------
 
