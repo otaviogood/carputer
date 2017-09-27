@@ -97,7 +97,7 @@ class NNModel:
         self.regularizers = sum([tf.nn.l2_loss(tensor) for tensor in self.l2_collection])
 
         # Add regression loss to regularizers. Arbitrary scalars to balance out the 3 things and give regression steering priority
-        self.loss = 0.001 * self.regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*5.0
+        self.loss = 0.001 * self.regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*2.0
         tf.summary.scalar('loss', self.loss)
         # -----------------------------------------------------------------------------------
 
