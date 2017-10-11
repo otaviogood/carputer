@@ -24,6 +24,10 @@ import key_watcher
 
 import manual_throttle_map
 
+# Data logging
+import debug_message as dm
+data_logger = dm.DebugMessage(verbose=True, enable_logging=True)
+
 # Kartputer modules
 main_car_directory = os.path.dirname(os.path.realpath(__file__))
 carputer_directory = os.path.dirname(main_car_directory)
@@ -68,6 +72,8 @@ odometer_ticks = 0
 button_arduino_out = 0
 button_arduino_in = 0
 
+imu_stream = ''
+
 
 def setup_serial_and_reset_arduinos():
 	# This will set up the serial ports. If they are already set up, it will
@@ -81,17 +87,21 @@ def setup_serial_and_reset_arduinos():
 		name_in = 'COM3'
 		name_out = 'COM4'
 	else:
-		name_in = '/dev/tty.usbmodem14231'  # 5v Arduino Uno (16 bit)
-		name_out = '/dev/tty.usbmodem14221'  # 3.3v Arduino Due (32 bit)
+		name_in = '/dev/tty.usbmodem14211'  # 5v Arduino Uno (16 bit)
+		name_out = '/dev/tty.usbmodem14231'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
-	port_out = serial.Serial(name_out, 38400, timeout=0.0)
+	port_out = serial.Serial(name_out, 115200, timeout=0.0)
+
+	imu_port = serial.Serial('/dev/tty.usbmodem14241', 115200, timeout=0.0)
+	
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
+	imu_port.flush()
 	print("Serial setup complete.")
-	return port_in, port_out
+	return port_in, port_out, imu_port
 
 
 def make_data_folder(base_path):
@@ -99,9 +109,46 @@ def make_data_folder(base_path):
 	base_path = os.path.expanduser(base_path)
 	session_dir_name = time.strftime('%Y_%m_%d__%H_%M_%S_%p')
 	session_full_path = os.path.join(base_path, session_dir_name)
+
+	logging_path = session_full_path + "_imu.log"
+	data_logger.init_logging(logging_path)
+
 	if not os.path.exists(session_full_path):
 		os.makedirs(session_full_path)
 	return session_full_path
+
+def process_imu(imu_port):
+
+	global imu_stream
+	try:
+		imu_stream += imu_port.read(imu_port.in_waiting).decode('ascii')
+
+	except UnicodeDecodeError:
+		imu_stream = ''
+		print("Imu stream read error")
+	telemetry = None
+
+	while '\n' in imu_stream:
+		line, imu_stream = imu_stream.split('\n', 1)
+		if line[0:3] == 'IMU':
+			# quat.xyzw, gyro.xyz, acc.xyz
+			# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+			sp = line.split(' ')
+			try:
+				quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+			except:
+				quat = [0.0, 0.0, 0.0, 0.0]
+			try:
+				gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+			except:
+				gyro = [0.0, 0.0, 0.0]
+			try:
+				accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+			except:
+				accel = [0.0, 0.0, 0.0]
+			telemetry = quat + gyro + accel
+	return telemetry
+
 
 
 def process_input(port_in, port_out):
@@ -126,6 +173,7 @@ def process_input(port_in, port_out):
 		print("Mysterious serial port error. Let's pretend it didn't happen. :)")
 	# Init steering, throttle and aux1.
 	steering, throttle, aux1 = None, None, None
+	telemetry = None
 	# Read lines from input Arduino
 	while '\n' in buffer_in:
 		line, buffer_in = buffer_in.split('\n', 1)
@@ -145,6 +193,25 @@ def process_input(port_in, port_out):
 			sp = line.split('\t')
 			milliseconds = int(sp[1])
 			odometer_ticks += 1
+		if line[0:3] == 'IMU':
+			pass
+						# quat.xyzw, gyro.xyz, acc.xyz
+						# IMU -0.0233 -0.0109 -0.0178 0.9995 0.0000 0.0000 0.0000 0.0400 -0.0400 0.1900
+						# sp = line.split(' ')
+						# try:
+						#     quat = [float(sp[1]), float(sp[2]), float(sp[3]), float(sp[4])]
+						# except:
+						#     quat = [0.0, 0.0, 0.0, 0.0]
+						# try:
+						#     gyro = [float(sp[5]), float(sp[6]), float(sp[7])]
+						# except:
+						#     gyro = [0.0, 0.0, 0.0]
+						# try:
+						#     accel = [float(sp[8]), float(sp[9]), float(sp[10])]
+						# except:
+						#     accel = [0.0, 0.0, 0.0]
+						
+						# telemetry = quat + gyro + accel
 		if line[0:6] == 'Button':
 			sp = line.split('\t')
 			button_arduino_out = int(sp[1])
@@ -153,7 +220,7 @@ def process_input(port_in, port_out):
 
 def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Adjust the steering and throttle.
-	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 110)
+	throttle = 90 if 88 <= throttle <= 92 else min(throttle, 130)
 	# Update steering
 	if old_steering != steering:
 		port_out.write(('S%d\n' % steering).encode('ascii'))
@@ -165,6 +232,27 @@ def process_output(old_steering, old_throttle, steering, throttle, port_out):
 	# Write all.
 	port_out.flush()
 
+
+
+def stop_car(steering, throttle, port_out):
+
+	# Send 90
+	process_output(-1, -1, 90, 0, port_out)
+	time.sleep(0.016)
+
+	# Send 0 # Full brake
+	process_output(-1, -1, 90, 90, port_out)
+	time.sleep(0.016)
+
+	# Send 90 to reset esc
+	process_output(-1, -1, 90, 0, port_out)
+	time.sleep(0.016)
+
+def center_esc(port_out):
+	# 90 Throttle centers the esc 
+	process_output(-1, -1, 90, 90, port_out)
+
+	#process_output(-1, -1, steering, throttle, port_out)
 
 def invert_log_bucket(a):
 	# Reverse the function that buckets the steering for neural net output.
@@ -187,34 +275,34 @@ def invert_log_bucket(a):
 # Tensorflow Functions   #
 ##########################
 def setup_tensorflow():
-    """Restores a tensorflow session and returns it if successful
-    """
-    net_model = NNModel()
+		"""Restores a tensorflow session and returns it if successful
+		"""
+		net_model = NNModel()
 
-    tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
-    sess = tf.Session(config=tf_config)
+		tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
+		sess = tf.Session(config=tf_config)
 
-    # Add ops to save and restore all of the variables
-    saver = tf.train.Saver()
+		# Add ops to save and restore all of the variables
+		saver = tf.train.Saver()
 
-    # Load the model checkpoint file
-    try:
-        tmp_file = config.tf_checkpoint_file
-        print("Loading model from config: {}".format(tmp_file))
-    except:
-		tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
-		print "loading latest trained model: " + str(tmp_file)
-        # print("CAN'T FIND THE GOOD MODEL")
-        # sys.exit(-1)
+		# Load the model checkpoint file
+		try:
+				tmp_file = config.tf_checkpoint_file
+				print("Loading model from config: {}".format(tmp_file))
+		except:
+			tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
+			print "loading latest trained model: " + str(tmp_file)
+				# print("CAN'T FIND THE GOOD MODEL")
+				# sys.exit(-1)
 
-    # Try to restore a session
-    try:
-        saver.restore(sess, tmp_file)
-    except:
-        print("Error restoring TF model: {}".format(tmp_file))
-        # sys.exit(-1)
+		# Try to restore a session
+		try:
+				saver.restore(sess, tmp_file)
+		except:
+				print("Error restoring TF model: {}".format(tmp_file))
+				# sys.exit(-1)
 
-    return sess, net_model
+		return sess, net_model
 
 def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 	# Resize our image from the car
@@ -225,9 +313,10 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 
 	# Setup the data and run tensorflow
 	batch = TrainingData.FromRealLife(resized, odo_ticks, vel)
-	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_pred], feed_dict=batch.FeedDict(net_model))
+	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_regress_result], feed_dict=batch.FeedDict(net_model))
 	steer_regression += 90
 	throttle_regression += 90
+	# print(throttle_regression)
 
 	# Get to potentiometer
 	# steer_regression = config.TensorflowToSteering(steer_regression)
@@ -319,6 +408,7 @@ def check_for_insomnia():
 def main():
 	global last_odometer_reset
 	# Init some vars..
+	telemetry = []
 	old_steering = 0
 	old_throttle = 0
 	old_aux1 = 0
@@ -341,7 +431,7 @@ def main():
 		check_for_insomnia()
 
 	# Setup ports.
-	port_in, port_out = setup_serial_and_reset_arduinos()
+	port_in, port_out, imu_port = setup_serial_and_reset_arduinos()
 
 	# Setup tensorflow
 	sess, net_model = setup_tensorflow()
@@ -350,6 +440,11 @@ def main():
 	drive_start_time = time.time()
 	print 'Awaiting switch flip..'
 
+	if we_are_autonomous:
+		print("Warning, we are intending to drive with tensorflow")
+
+	session_full_path = make_data_folder('~/training-images')
+
 	while True:
 		loop_start_time = time.time()
 
@@ -357,16 +452,16 @@ def main():
 		if last_switch != button_arduino_out:
 			last_switch = button_arduino_out
 			# See if the car started up with the switch already flipped.
-			if time.time() - drive_start_time < 1:
-				print 'Error: start switch in the wrong position.'
-				sys.exit()
+			# if time.time() - drive_start_time < 1:
+			# 	print 'Error: start switch in the wrong position.'
+			# 	sys.exit()
 
 			if button_arduino_out == 1:
 				currently_running = True
 				print '%s: Switch flipped.' % frame_count
 				last_odometer_reset = odometer_ticks
 				if we_are_recording and (not we_are_autonomous):
-					session_full_path = make_data_folder('~/training-images')
+					
 					print 'STARTING TO RECORD.'
 					print 'Folder: %s' % session_full_path
 					config.store('last_record_dir', session_full_path)
@@ -378,6 +473,7 @@ def main():
 					print("DRIVING AUTONOMOUSLY (not recording).")
 			else:
 				print("%s: Switch flipped. Recording stopped." % frame_count)
+				override_autonomous_control = False
 				currently_running = False
 
 		# Read input data from arduinos.
@@ -390,6 +486,9 @@ def main():
 		if new_aux1 != None:
 			aux1 = new_aux1
 
+		telemetry = process_imu(imu_port)
+		
+
 		# Check to see if we should stop the car via the RC during TF control.
 		# But also provide a way to re-engage autonomous control after an override.
 		if we_are_autonomous and currently_running:
@@ -397,10 +496,11 @@ def main():
 				if not override_autonomous_control:
 					print '%s: Detected RC override: stopping.' % frame_count
 					override_autonomous_control = True
-			if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
-				old_aux1 = aux1
-				print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
-				override_autonomous_control = False
+					if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
+						old_aux1 = aux1
+						print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
+						center_esc(port_out)
+						override_autonomous_control = False
 
 		# Check to see if we should reset the odometer via aux1 during manual
 		# driving. This is Button E on the RC transmitter.
@@ -430,6 +530,12 @@ def main():
 			# Read a frame from the camera.
 			frame = camera_stream.read()
 			steering, throttle = do_tensorflow(sess, net_model, frame, odometer_ticks - last_odometer_reset, vel)
+			if ((frame_count % 25) == 0) and (vel != 0):
+				# Simulate dropped radio frames from  rc
+				#throttle = 0
+				pass
+				
+
 			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
 		if we_are_recording and currently_running:
@@ -448,14 +554,22 @@ def main():
 			frame = camera_stream.read()
 			cv2.imwrite('/tmp/test.png', frame)
 
+		if telemetry is not None:
+			frames = [str(frame_count).zfill(5)]
+			telemetry = frames + telemetry
+			data_logger.log_data(telemetry)
+
 		if override_autonomous_control:
 			# Full brake and neutral steering.
 			throttle, steering = 0, 90
+			#print("Sending kill command to car")
+			stop_car(steering, throttle, port_out)
 
-		# Send output data to arduinos.
-		process_output(old_steering, old_throttle, steering, throttle, port_out)
-		old_steering = steering
-		old_throttle = throttle
+		else:
+			# Send output data to arduinos.
+			process_output(old_steering, old_throttle, steering, throttle, port_out)
+			old_steering = steering
+			old_throttle = throttle
 
 		# Attempt to go at 30 fps. In reality, we could go slower if something hiccups.
 		seconds = time.time() - loop_start_time

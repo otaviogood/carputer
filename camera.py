@@ -6,7 +6,6 @@ Largely from pyimagesearch.com
 import threading
 import cv2
 
-
 class CameraStream(object):
   def __init__(self, src=0):
     self.stream = cv2.VideoCapture(src)
@@ -40,3 +39,26 @@ class CameraStream(object):
 
   def stop(self):
     self.stopped = True
+
+'''
+import glob,os,sys
+# Replays a recorded lap
+class VirtualCameraStream(object):
+  def __init__(self, src=0):
+    self.stopped = False
+    self.files = glob.glob(os.getenv('IMAGES_DIR')+'/*.png')
+    self.index = 0
+
+  def start(self):
+    self.index = 0    
+    return self
+
+  def read(self):
+    img = cv2.imread(self.files[self.index])
+    self.index += 1
+    self.index = self.index % len(self.files)
+    return img
+
+  def stop(self):
+    self.stopped = True
+'''

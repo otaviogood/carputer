@@ -73,6 +73,7 @@ print("Tensorflow version: " + tf.__version__)
 # -------- Load all data --------
 train_data = TrainingData.fromfilename("train", args['--indir'])
 test_data = TrainingData.fromfilename("test", args['--indir'])
+print("In dir: {}".format(args["--indir"]))
 
 if config.neural_net_mode == 'alexnet':
     net_model = NNModel()
