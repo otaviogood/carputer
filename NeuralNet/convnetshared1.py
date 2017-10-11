@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.contrib import rnn
 import numpy as np
 import sys,os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -29,6 +30,10 @@ def max_pool_2x2(x):
     return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
                           strides=[1, 2, 2, 1], padding='SAME')
 
+def avg_pool_2x2(x):
+    return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1],
+                          strides=[1, 2, 2, 1], padding='SAME')
+
 
 # https://stackoverflow.com/questions/36668542/flatten-batch-in-tensorflow
 def flatten_batch(tensor):
@@ -39,15 +44,18 @@ def flatten_batch(tensor):
 
 class NNModel:
     # static class vars
-    width = 128
-    height = 128
-    img_channels = 3
+
+    n_steps = 1  # timesteps for RNN-like training (no RNN here. This is the Alexnet.)
+    n_hidden = 128  # hidden layer num of features
+    # n_vocab = 256
 
     def __init__(self):
         self.l2_collection = []
+        self.visualizations = {}
 
         # Set up the inputs to the conv net
-        self.in_image = tf.placeholder(tf.float32, shape=[None, NNModel.width * NNModel.height * NNModel.img_channels], name='in_image')
+        self.in_image = tf.placeholder(tf.float32, shape=[None, config.width * config.height * config.img_channels], name='in_image')
+        self.in_image_small = tf.placeholder(tf.float32, shape=[None, config.width_small * config.height_small * config.img_channels], name='in_image_small')
         self.in_speed = tf.placeholder(tf.float32, shape=[None], name='in_speed')
         # Labels
         self.steering_regress_ = tf.placeholder(tf.float32, shape=[None], name='steering_regress_')
@@ -57,10 +65,13 @@ class NNModel:
         self.train_mode = tf.placeholder(tf.float32)
 
         # Reshape and put input image in range [-0.5..0.5]
-        x_image = tf.reshape(self.in_image, [-1, NNModel.width, NNModel.height, NNModel.img_channels])  / 255.0 - 0.5
+        x_image = tf.reshape(self.in_image, [-1, config.width, config.height, config.img_channels])  / 255.0 - 0.5
 
         # Neural net layers - first convolution, then fully connected, then final transform to output
         act = self.conv_layer(x_image, 8, 5, 'conv1', 'shared_conv')
+        # act = max_pool_2x2(x_image)
+        # act = max_pool_2x2(act)
+        # act = max_pool_2x2(act)
         act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
         act = self.conv_layer(act, 16, 5, 'conv3', 'shared_conv')
         act = self.conv_layer(act, 32, 5, 'conv4', 'shared_conv')
@@ -119,6 +130,173 @@ class NNModel:
     def fc_layer(self, tensor, channels_out, name, scope_name, dropout):
         channels_in = tensor.get_shape().as_list()[1]
         W_fc = weight_variable([channels_in, channels_out], channels_in, channels_out, name='W_' + name, coll=scope_name)
+        self.l2_collection.append(W_fc)
+        b_fc = bias_variable([channels_out], name='b_' + name, coll=scope_name)
+        h_fc = tf.nn.relu(tf.matmul(tensor, W_fc) + b_fc)
+        if dropout:
+            h_fc = tf.nn.dropout(h_fc, self.keep_prob)
+        return h_fc
+
+
+class LSTMModel:
+    # static class vars
+
+    n_steps = 64  # timesteps for RNN-like training
+    n_hidden = 64  # hidden layer num of features
+
+    # n_vocab = 256
+
+    def __init__(self):
+        self.l2_collection = []
+        self.visualizations = {}
+
+        # Set up the inputs to the conv net
+        self.in_image = tf.placeholder(tf.float32, shape=[None, config.width * config.height * config.img_channels], name='in_image')
+        self.in_image_small = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, config.width_small * config.height_small * config.img_channels], name='in_image_small')
+        # self.visualizations["in_image"] = ("rgb_batch_steps", tf.reshape() self.in_image)
+        self.in_speed = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='in_speed')
+        # Labels
+        self.steering_regress_ = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='steering_regress_')
+        self.throttle_regress_ = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='throttle_regress_')
+        # misc
+        self.keep_prob = tf.placeholder(tf.float32)
+        self.train_mode = tf.placeholder(tf.float32)
+
+        # Reshape and put input image in range [-0.5..0.5]
+        x_image = tf.reshape(self.in_image_small, [-1, LSTMModel.n_steps, config.width_small, config.height_small, config.img_channels]) / 255.0 - 0.5
+        batch_size = tf.shape(x_image)[0]
+
+        act = tf.reshape(x_image, [-1, config.width_small, config.height_small, config.img_channels])
+        # act = avg_pool_2x2(act)
+
+        self.visualizations["down_image"] = ("rgb_batch_steps", act)
+        # act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
+        act = self.conv_layer(act, 4, 5, 'conv3', 'shared_conv')
+        final_channels = 16
+        act = self.conv_layer(act, final_channels, 5, 'conv4', 'shared_conv')
+
+        new_width = act.get_shape().as_list()[1]
+
+        act = flatten_batch(act)
+
+        # Sneak the speedometer value into the matrix
+        in_speed_shaped = tf.reshape(self.in_speed, [-1, 1]) * 10.0
+        act = tf.concat([act, in_speed_shaped], 1)
+
+
+        # Prepare data shape to match `rnn` function requirements
+        # Current data input shape: (batch_size, n_steps, n_vocab)
+        # Required shape: 'n_steps' tensors list of shape (batch_size, n_vocab)
+
+        # Unstack to get a list of 'n_steps' tensors of shape (batch_size, width, height, channels)
+        act = tf.reshape(act, [-1, LSTMModel.n_steps, new_width * new_width * final_channels + 1])
+        act = tf.unstack(act, LSTMModel.n_steps, 1)
+
+        # Define a lstm cell with tensorflow
+        with tf.variable_scope('lstm'):
+            lstm_cell = rnn.BasicLSTMCell(LSTMModel.n_hidden)
+            # lstm_cell = tf.contrib.rnn.core_rnn_cell.BasicLSTMCell(LSTMModel.n_hidden)
+
+            # Get lstm cell output
+            # outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
+            state = lstm_cell.zero_state(batch_size, tf.float32)
+            outputs = []
+            for input_ in act:
+                output, state = lstm_cell(input_, state)
+                outputs.append(output)
+            # return (outputs, state)
+
+        # ****************************** DeBUG ***********************************************************************!!!!!!!!!!!!!!!!!!!!!!!!###################@#%$$%&%^*^&*&*(
+        # act = tf.reshape(x[0], [-1, config.width, config.height, config.img_channels])
+        # act = max_pool_2x2(act)
+        # self.act = max_pool_2x2(act)
+        # self.visualizations["pooled"] = ("rgb_batch", self.act)
+        # # act = max_pool_2x2(act)
+        # act = flatten_batch(self.act)
+        #
+        # weights = tf.Variable(tf.random_normal([act.get_shape().as_list()[1], 2]))
+        # biases = tf.Variable(tf.random_normal([2]))
+        # # Linear activation, using rnn inner loop last output
+        # regress_outs = tf.matmul(act, weights) + biases
+
+
+
+        # Reshape and put input image in range [-0.5..0.5]
+        x_image2 = tf.reshape(self.in_image / 255.0 - 0.5, [-1, config.width, config.height, config.img_channels])
+        # self.visualizations["pathB_image"] = ("rgb_batch", x_image2)
+
+        # Neural net layers - first convolution, then fully connected, then final transform to output
+        act = self.conv_layer(x_image2, 8, 5, 'conv1b', 'shared_conv')
+        # act = max_pool_2x2(x_image2)
+        act = self.conv_layer(act, 12, 5, 'conv2b', 'shared_conv')
+        act = self.conv_layer(act, 16, 5, 'conv3b', 'shared_conv')
+        act = self.conv_layer(act, 32, 5, 'conv4b', 'shared_conv')
+
+        act = flatten_batch(act)
+        self.mid_act = act
+        self.mid_lstm = outputs[-1] * 0.1
+        # act = tf.concat([act, outputs[-1] * 0.1], 1)
+        act = self.fc_layer(act, 1024, 'fc1', 'shared_fc', True)
+
+        # -------------------- Insert discriminator here for domain adaptation --------------------
+        # Sneak the speedometer value into the matrix
+        in_speed_last = tf.transpose(self.in_speed, [1, 0, 2])[-1]  # [batch_size, 1]
+        # in_speed_shaped = tf.reshape(in_speed_last, [-1, 1])
+        # act = tf.concat([act, in_speed_last, outputs[-1]], 1)
+        act = tf.concat([act, in_speed_last], 1)
+
+        fc2_num_outs = 1024
+        act = self.fc_layer(act, fc2_num_outs, 'fc2', 'main', False)
+
+
+
+
+
+        act_size = act.get_shape().as_list()[1]
+        weights = tf.Variable(tf.random_normal([act_size, 2]))
+        biases = tf.Variable(tf.random_normal([2]))
+        # Linear activation, using rnn inner loop last output
+        regress_outs = tf.matmul(act, weights) + biases  # [batch_size, 2]
+
+        # weights = tf.Variable(tf.random_normal([LSTMModel.n_hidden, 2]))
+        # biases = tf.Variable(tf.random_normal([2]))
+        # # Linear activation, using rnn inner loop last output
+        # regress_outs = tf.matmul(outputs[-1], weights) + biases
+
+        self.steering_regress_result = tf.reshape(regress_outs[:, 0], [-1])  # [batch_size]
+        self.throttle_regress_result = tf.reshape(regress_outs[:, 1], [-1])  # [batch_size]
+
+        # we will optimized to minimize mean squared error
+        steering_temp = tf.reshape(self.steering_regress_[:, -1], [-1])
+        throttle_temp = tf.reshape(self.throttle_regress_[:, -1], [-1])
+        # steering_regress_last = tf.transpose(self.steering_regress_result, [1, 0, 2])[-1]
+        # throttle_regress_last = tf.transpose(self.throttle_regress_result, [1, 0, 2])[-1]
+        self.squared_diff = tf.reduce_mean(tf.squared_difference(self.steering_regress_result, steering_temp))
+        self.squared_diff_throttle = tf.reduce_mean(tf.squared_difference(self.throttle_regress_result, throttle_temp))
+
+        self.regularizers = sum([tf.nn.l2_loss(tensor) for tensor in self.l2_collection])
+        # self.regularizers = tf.zeros((1))
+        # Add regression loss to regularizers. Arbitrary scalars to balance out the 3 things and give regression steering priority
+        # self.loss = self.squared_diff * 0.1 + self.squared_diff_throttle * 5.0
+        self.loss = 0.001 * self.regularizers + self.squared_diff*0.1 + self.squared_diff_throttle*5.0
+
+        optimizerA = tf.train.AdamOptimizer(3e-4)
+        self.train_step = optimizerA.minimize(self.loss)
+
+
+    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name):
+        channels_in = tensor.get_shape().as_list()[3]
+        W_conv = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='W_' + name,
+                                   coll=scope_name)
+        self.l2_collection.append(W_conv)
+        b_conv = bias_variable([channels_out], name='b_' + name, coll=scope_name)
+        h_conv = tf.nn.relu(conv2d(tensor, W_conv) + b_conv)
+        return max_pool_2x2(h_conv)
+
+    def fc_layer(self, tensor, channels_out, name, scope_name, dropout):
+        channels_in = tensor.get_shape().as_list()[1]
+        W_fc = weight_variable([channels_in, channels_out], channels_in, channels_out, name='W_' + name,
+                               coll=scope_name)
         self.l2_collection.append(W_fc)
         b_fc = bias_variable([channels_out], name='b_' + name, coll=scope_name)
         h_fc = tf.nn.relu(tf.matmul(tensor, W_fc) + b_fc)

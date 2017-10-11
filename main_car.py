@@ -306,11 +306,11 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 
 # This checks that we are running the program that allows us to close the lid of our mac and keep running.
 def check_for_insomnia():
-    print("Checking for Insomnia (necessary for everything to work during lid close)")
-    proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
-    (out, err) = proc.communicate()
+	print("Checking for Insomnia (necessary for everything to work during lid close)")
+	proc = subprocess.Popen(["ps aux"], stdout=subprocess.PIPE, shell=True)
+	(out, err) = proc.communicate()
 
-    if not "Insomnia" in out:
+	if not "Insomnia" in out:
 		print "\nERROR: YOU ARE NOT RUNNING InsomniaX."
 		print "THAT IS THE PROGRAM THAT LETS YOU SHUT THE LID ON THE MAC AND KEEP IT RUNNING."
 		print "How are you gonna drive a car if your driver is asleep?"
@@ -333,8 +333,8 @@ def main():
 	override_autonomous_control = False
 	train_on_this_image = True
 	vel = 0.0
-	last_odo = 0
-	last_millis = 0.0
+	last_odo_queue = []
+	last_millis_queue = []
 
 	# Check for insomnia
 	if platform.system() == "Darwin":
@@ -397,10 +397,10 @@ def main():
 				if not override_autonomous_control:
 					print '%s: Detected RC override: stopping.' % frame_count
 					override_autonomous_control = True
-	        if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
-			    old_aux1 = aux1
-			    print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
-			    override_autonomous_control = False
+			if abs(aux1 - old_aux1) > 400 and override_autonomous_control:
+				old_aux1 = aux1
+				print '%s: Detected RC input: re-engaging autonomous control.' % frame_count
+				override_autonomous_control = False
 
 		# Check to see if we should reset the odometer via aux1 during manual
 		# driving. This is Button E on the RC transmitter.
@@ -414,14 +414,19 @@ def main():
 		# This seems to take about 10ms.
 		if we_are_autonomous and currently_running:
 			# Calculate velocity from odometer. Gets weird when stopped.
+			last_odo = last_odo_queue[-config.odo_delta]
+			last_millis = last_millis_queue[-config.odo_delta]
+			vel = 0
 			if odometer_ticks != last_odo and milliseconds > last_millis:
-				vel = (float(odometer_ticks) - last_odo) / (milliseconds - last_millis)
-				if last_millis == 0 and last_odo == 0:
-					vel = 0
-				if odometer_ticks - last_odo > 50 or last_odo >= odometer_ticks:
-					vel = 0
-				last_odo = odometer_ticks
-				last_millis = milliseconds
+				if milliseconds - last_millis == 0: vel = 0
+				else: vel = (float(odometer_ticks) - last_odo) / (milliseconds - last_millis)
+				if last_millis == 0 and last_odo == 0: vel = 0
+				if last_odo >= odometer_ticks: vel = 0
+			# append to circular queue
+			last_odo_queue.append(odometer_ticks)
+			last_millis_queue.append(milliseconds)
+			if len(last_odo_queue) > config.odo_delta: last_odo_queue = last_odo_queue[1:]
+			if len(last_millis_queue) > config.odo_delta: last_millis_queue = last_millis_queue[1:]
 			# Read a frame from the camera.
 			frame = camera_stream.read()
 			steering, throttle = do_tensorflow(sess, net_model, frame, odometer_ticks - last_odometer_reset, vel)

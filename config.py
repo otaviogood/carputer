@@ -2,15 +2,13 @@ import math
 
 # This file to contain all the config variables shared across modules
 
-use_throttle_manual_map = True
-use_median_filter_throttle = False
-# floating point 0 or 1 to multiply against odo value
-use_odometer = 1.0
+# This is time time difference in frames used to calc the speed value. If it
+# takes more than this many frames to get a tick, the speed will be 0.
+odo_delta = 6
 # The laptop has very little GPU memory, so we have to scale down to run on it.
 running_on_laptop = True
-do_flip_augmentation = False
 
-# Should tensorflow use the GPU
+# Should tensorflow use the GPU - only for the car, this var not used for training.
 should_use_gpu = 0
 
 camera_id = 0
@@ -18,12 +16,15 @@ camera_id = 0
 # If no tf_checkpoint_file variable is found, the latest generated model is loaded.
 #tf_checkpoint_file = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt" 
 
+# Either alexnet or lstm. Use lower case.
+neural_net_mode = 'alexnet'
 
-# http://www.iquilezles.org/apps/graphtoy/
-# round((log(abs(x)+1))/(log(2))*(x)/(abs(x)))
-
-def do_log_mapping_to_buckets(a):
-    return int(round(math.copysign(math.log(abs(a) + 1, 2.0), a))) + 7
+# Neural net input params for image sizes
+width = 128
+height = 128
+width_small = 16
+height_small = 16
+img_channels = 3
 
 
 # JSON cache of local settings (path to latest training data folder, model checkpoint, ...)

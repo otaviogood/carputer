@@ -29,7 +29,7 @@ args = docopt(__doc__)
 all_folders = args['<folders>']
 
 lamecount =0
-def ReadPNG(source, targetWidth, targetHeight, train_or_test_or_gan):
+def ReadPNG(source, targetWidth, targetHeight, targetWidth2, targetHeight2, train_or_test_or_gan):
     global lamecount
     try:
         pngfile = Image.open(source)
@@ -50,7 +50,12 @@ def ReadPNG(source, targetWidth, targetHeight, train_or_test_or_gan):
     ret[:, :, 0] = pixRGB[:, :, 0]
     ret[:, :, 1] = pixRGB[:, :, 1]
     ret[:, :, 2] = pixRGB[:, :, 2]
-    return ret
+    pixRGB2 = np.array(pngfile.resize((targetWidth2, targetHeight2), Image.BILINEAR))
+    ret2 = np.empty((targetHeight2, targetWidth2, 3), dtype=np.uint8)
+    ret2[:, :, 0] = pixRGB2[:, :, 0]
+    ret2[:, :, 1] = pixRGB2[:, :, 1]
+    ret2[:, :, 2] = pixRGB2[:, :, 2]
+    return ret, ret2
 
 def is_finite(x):
     return not math.isnan(x) and not math.isinf(x)
@@ -100,12 +105,12 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
     allNames = [name[name.find("frame_"):] for name in allPNGs]
 
     processed_pngs = []
+    processed_pngs_small = []
     all_steering = []
     all_throttle = []
     all_odos = []
     all_vels = []
-    last_odo = 0
-    last_millis = 0
+    all_millis = []
     c = collections.Counter()
 
     for i in xrange(len(allNames)):
@@ -121,8 +126,9 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
             print s
 
         # only warp training data, not test.
-        png = ReadPNG(allPNGs[i], 128, 128, train_or_test_or_gan)
+        png, png_small = ReadPNG(allPNGs[i], 128, 128, 16, 16, train_or_test_or_gan)
         processed_pngs.append(png.flatten())
+        processed_pngs_small.append(png_small.flatten())
 
         all_steering.append(ParseGoodFloat(s[5]))
         all_throttle.append(ParseGoodFloat(s[3]))
@@ -131,18 +137,17 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
 
         # load odometer millisecond marks and convert to speed.
         millis = float(s[7])
+        last_odo = 0
+        last_millis = 0
+        if len(all_odos) > config.odo_delta:
+            last_odo = all_odos[-config.odo_delta]
+            last_millis = all_millis[-config.odo_delta]
         vel = 0
         if temp_odo != last_odo:
-            if millis - last_millis == 0:
-                vel = 0
-            else:
-                vel = (temp_odo - last_odo) / (millis - last_millis)
-            if (last_millis == 0) and (last_odo == 0):
-                vel = 0
-            if (temp_odo - last_odo > 50) or (last_odo >= temp_odo):
-                vel = 0
-            last_odo = temp_odo
-            last_millis = millis
+            if millis - last_millis == 0: vel = 0
+            else: vel = (temp_odo - last_odo) / (millis - last_millis)
+            if (last_millis == 0) and (last_odo == 0): vel = 0
+            if (last_odo >= temp_odo): vel = 0
 
         # if config.use_throttle_manual_map:
         #     log_throttle = manual_throttle_map.to_throttle_buckets(throttle)
@@ -154,6 +159,7 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
 
         all_odos.append(temp_odo)
         all_vels.append(vel)
+        all_millis.append(millis)
 
     # Fix places where our crappy remote control is dropping signal. Hacky.
     for i in xrange(len(allNames)):
@@ -175,6 +181,7 @@ def GenNumpyFiles(allPNGs, train_or_test_or_gan, slice=None, telemetry=None, do_
 
     data = [
         (mode + "pic_array", np.array(processed_pngs)),
+        (mode + "pic_small_array", np.array(processed_pngs_small)),
         (mode + "steer_array", np.array(all_steering)),
         (mode + "throttle_array", np.array(all_throttle)),
         (mode + "odo_array", np.array(all_odos)),
