@@ -141,10 +141,8 @@ class NNModel:
 class LSTMModel:
     # static class vars
 
-    n_steps = 64  # timesteps for RNN-like training
+    n_steps = 32  # timesteps for RNN-like training
     n_hidden = 64  # hidden layer num of features
-
-    # n_vocab = 256
 
     def __init__(self):
         self.l2_collection = []
@@ -152,74 +150,72 @@ class LSTMModel:
 
         # Set up the inputs to the conv net
         self.in_image = tf.placeholder(tf.float32, shape=[None, config.width * config.height * config.img_channels], name='in_image')
-        self.in_image_small = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, config.width_small * config.height_small * config.img_channels], name='in_image_small')
+        self.in_image_small = tf.placeholder(tf.float32, shape=[None, self.n_steps, config.width_small * config.height_small * config.img_channels], name='in_image_small')
         # self.visualizations["in_image"] = ("rgb_batch_steps", tf.reshape() self.in_image)
-        self.in_speed = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='in_speed')
+        self.in_speed = tf.placeholder(tf.float32, shape=[None, self.n_steps, 1], name='in_speed')
         # Labels
-        self.steering_regress_ = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='steering_regress_')
-        self.throttle_regress_ = tf.placeholder(tf.float32, shape=[None, LSTMModel.n_steps, 1], name='throttle_regress_')
+        self.steering_regress_ = tf.placeholder(tf.float32, shape=[None, self.n_steps, 1], name='steering_regress_')
+        self.throttle_regress_ = tf.placeholder(tf.float32, shape=[None, self.n_steps, 1], name='throttle_regress_')
         # misc
         self.keep_prob = tf.placeholder(tf.float32)
         self.train_mode = tf.placeholder(tf.float32)
 
-        # Reshape and put input image in range [-0.5..0.5]
-        x_image = tf.reshape(self.in_image_small, [-1, LSTMModel.n_steps, config.width_small, config.height_small, config.img_channels]) / 255.0 - 0.5
-        batch_size = tf.shape(x_image)[0]
+        real_lstm = False
+        if real_lstm:
+            # Reshape and put input image in range [-0.5..0.5]
+            x_image = tf.reshape(self.in_image_small, [-1, self.n_steps, config.width_small, config.height_small, config.img_channels]) / 255.0 - 0.5
+            batch_size = tf.shape(x_image)[0]
 
-        act = tf.reshape(x_image, [-1, config.width_small, config.height_small, config.img_channels])
-        # act = avg_pool_2x2(act)
+            act = tf.reshape(x_image, [-1, config.width_small, config.height_small, config.img_channels])
+            # act = avg_pool_2x2(act)
 
-        self.visualizations["down_image"] = ("rgb_batch_steps", act)
-        # act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
-        act = self.conv_layer(act, 4, 5, 'conv3', 'shared_conv')
-        final_channels = 16
-        act = self.conv_layer(act, final_channels, 5, 'conv4', 'shared_conv')
+            self.visualizations["down_image"] = ("rgb_batch_steps", act)
+            # act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
+            # act = self.conv_layer(act, 4, 5, 'conv3', 'shared_conv')
+            final_channels = 16
+            act = self.conv_layer(act, final_channels, 5, 'conv4', 'shared_conv')
 
-        new_width = act.get_shape().as_list()[1]
+            new_width = act.get_shape().as_list()[1]
 
-        act = flatten_batch(act)
+            act = flatten_batch(act)
 
-        # Sneak the speedometer value into the matrix
-        in_speed_shaped = tf.reshape(self.in_speed, [-1, 1]) * 10.0
-        act = tf.concat([act, in_speed_shaped], 1)
-
-
-        # Prepare data shape to match `rnn` function requirements
-        # Current data input shape: (batch_size, n_steps, n_vocab)
-        # Required shape: 'n_steps' tensors list of shape (batch_size, n_vocab)
-
-        # Unstack to get a list of 'n_steps' tensors of shape (batch_size, width, height, channels)
-        act = tf.reshape(act, [-1, LSTMModel.n_steps, new_width * new_width * final_channels + 1])
-        act = tf.unstack(act, LSTMModel.n_steps, 1)
-
-        # Define a lstm cell with tensorflow
-        with tf.variable_scope('lstm'):
-            lstm_cell = rnn.BasicLSTMCell(LSTMModel.n_hidden)
-            # lstm_cell = tf.contrib.rnn.core_rnn_cell.BasicLSTMCell(LSTMModel.n_hidden)
-
-            # Get lstm cell output
-            # outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
-            state = lstm_cell.zero_state(batch_size, tf.float32)
-            outputs = []
-            for input_ in act:
-                output, state = lstm_cell(input_, state)
-                outputs.append(output)
-            # return (outputs, state)
-
-        # ****************************** DeBUG ***********************************************************************!!!!!!!!!!!!!!!!!!!!!!!!###################@#%$$%&%^*^&*&*(
-        # act = tf.reshape(x[0], [-1, config.width, config.height, config.img_channels])
-        # act = max_pool_2x2(act)
-        # self.act = max_pool_2x2(act)
-        # self.visualizations["pooled"] = ("rgb_batch", self.act)
-        # # act = max_pool_2x2(act)
-        # act = flatten_batch(self.act)
-        #
-        # weights = tf.Variable(tf.random_normal([act.get_shape().as_list()[1], 2]))
-        # biases = tf.Variable(tf.random_normal([2]))
-        # # Linear activation, using rnn inner loop last output
-        # regress_outs = tf.matmul(act, weights) + biases
+            # Sneak the speedometer value into the matrix
+            in_speed_shaped = tf.reshape(self.in_speed, [-1, 1]) * 10.0
+            act = tf.concat([act, in_speed_shaped], 1)
 
 
+            # Prepare data shape to match `rnn` function requirements
+            # Current data input shape: (batch_size, n_steps, n_vocab)
+            # Required shape: 'n_steps' tensors list of shape (batch_size, n_vocab)
+
+            # Unstack to get a list of 'n_steps' tensors of shape (batch_size, width, height, channels)
+            act = tf.reshape(act, [-1, self.n_steps, new_width * new_width * final_channels + 1])
+            act = tf.unstack(act, self.n_steps, 1)
+
+            # Define a lstm cell with tensorflow
+            with tf.variable_scope('lstm'):
+                lstm_cell = rnn.BasicLSTMCell(self.n_hidden)
+                # lstm_cell = tf.contrib.rnn.core_rnn_cell.BasicLSTMCell(self.n_hidden)
+
+                # Get lstm cell output
+                # outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
+                state = lstm_cell.zero_state(batch_size, tf.float32)
+                outputs = []
+                for input_ in act:
+                    output, state = lstm_cell(input_, state)
+                    outputs.append(output)
+                # return (outputs, state)
+            lstm_out = outputs[-1]
+        else:
+            act = tf.reshape(self.in_image_small / 255.0 - 0.5, [-1, self.n_steps, config.width_small, config.height_small, config.img_channels])
+            act = tf.transpose(act, [0, 2, 3, 1, 4])
+            act = tf.reshape(act, [-1, config.width_small, config.height_small, self.n_steps * config.img_channels])
+            act = self.conv_layer(act, self.n_steps*4, 5, 'conv1c', 'shared_conv')
+            act = flatten_batch(act)
+            in_speed_shaped = tf.reshape(self.in_speed, [-1, self.n_steps]) * 10.0
+            act = tf.concat([act, in_speed_shaped], 1)
+            act = self.fc_layer(act, 128, 'fc1c', 'shared_fc', True)
+            lstm_out = act
 
         # Reshape and put input image in range [-0.5..0.5]
         x_image2 = tf.reshape(self.in_image / 255.0 - 0.5, [-1, config.width, config.height, config.img_channels])
@@ -234,15 +230,16 @@ class LSTMModel:
 
         act = flatten_batch(act)
         self.mid_act = act
-        self.mid_lstm = outputs[-1] * 0.1
-        # act = tf.concat([act, outputs[-1] * 0.1], 1)
+        self.mid_lstm = lstm_out * 0.01
+        act = tf.concat([act, self.mid_lstm], 1)
+        # act = self.mid_lstm
         act = self.fc_layer(act, 1024, 'fc1', 'shared_fc', True)
 
         # -------------------- Insert discriminator here for domain adaptation --------------------
         # Sneak the speedometer value into the matrix
         in_speed_last = tf.transpose(self.in_speed, [1, 0, 2])[-1]  # [batch_size, 1]
         # in_speed_shaped = tf.reshape(in_speed_last, [-1, 1])
-        # act = tf.concat([act, in_speed_last, outputs[-1]], 1)
+        # act = tf.concat([act, in_speed_last, lstm_out], 1)
         act = tf.concat([act, in_speed_last], 1)
 
         fc2_num_outs = 1024
@@ -250,18 +247,10 @@ class LSTMModel:
 
 
 
-
-
-        act_size = act.get_shape().as_list()[1]
-        weights = tf.Variable(tf.random_normal([act_size, 2]))
-        biases = tf.Variable(tf.random_normal([2]))
-        # Linear activation, using rnn inner loop last output
-        regress_outs = tf.matmul(act, weights) + biases  # [batch_size, 2]
-
-        # weights = tf.Variable(tf.random_normal([LSTMModel.n_hidden, 2]))
-        # biases = tf.Variable(tf.random_normal([2]))
-        # # Linear activation, using rnn inner loop last output
-        # regress_outs = tf.matmul(outputs[-1], weights) + biases
+        num_outputs = 2
+        W_fc_final = weight_variable([fc2_num_outs, num_outputs], fc2_num_outs, num_outputs, name='W_fc4', coll='main')
+        b_fc_final = bias_variable([num_outputs], name='b_fc4', coll='main')
+        regress_outs = tf.matmul(act, W_fc_final) + b_fc_final
 
         self.steering_regress_result = tf.reshape(regress_outs[:, 0], [-1])  # [batch_size]
         self.throttle_regress_result = tf.reshape(regress_outs[:, 1], [-1])  # [batch_size]
@@ -284,14 +273,17 @@ class LSTMModel:
         self.train_step = optimizerA.minimize(self.loss)
 
 
-    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name):
+    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name, pool=True):
         channels_in = tensor.get_shape().as_list()[3]
         W_conv = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='W_' + name,
                                    coll=scope_name)
         self.l2_collection.append(W_conv)
         b_conv = bias_variable([channels_out], name='b_' + name, coll=scope_name)
         h_conv = tf.nn.relu(conv2d(tensor, W_conv) + b_conv)
-        return max_pool_2x2(h_conv)
+        if pool:
+            return max_pool_2x2(h_conv)
+        else:
+            return h_conv
 
     def fc_layer(self, tensor, channels_out, name, scope_name, dropout):
         channels_in = tensor.get_shape().as_list()[1]
