@@ -1,0 +1,114 @@
+#!/bin/bash
+
+# "Phase 1" this is the user-facing script for launching a new spot istance
+
+if [ "$1" = "" ]; then echo "USER ERROR: please specify a configuration file"; exit -1; fi
+
+cd $(dirname $0)
+
+. $1 || exit -1
+
+# New instance:
+# Desired launch zone
+LAUNCH_ZONE=$ec2spotter_launch_zone
+# Region is LAUNCH_ZONE minus the last character
+LAUNCH_REGION=$(echo $LAUNCH_ZONE | sed -e 's/.$//')
+PUB_KEY=$ec2spotter_key_name
+
+# Existing Volume:
+# If no volume zone
+if [ "$ec2spotter_volume_zone" = "" ]
+then # Use instance zone
+	ec2spotter_volume_zone=$LAUNCH_ZONE
+fi
+
+# Name of volume (find it by name later)
+ROOT_VOL_NAME=$ec2spotter_volume_name
+# zone of volume (needed if different than instance zone)
+ROOT_ZONE=$ec2spotter_volume_zone
+# Region is Zone minus the last character
+ROOT_REGION=$(echo $ROOT_ZONE | sed -e 's/.$//')
+
+
+#echo "ROOT_VOL_NAME=${ROOT_VOL_NAME}; ROOT_ZONE=${ROOT_ZONE}; ROOT_REGION=${ROOT_REGION}; "
+#echo "LAUNCH_ZONE=${LAUNCH_ZONE}; LAUNCH_REGION=${LAUNCH_REGION}; PUB_KEY=${PUB_KEY}"
+
+AWS_ACCESS_KEY=`aws configure get aws_access_key_id`
+AWS_SECRET_KEY=`aws configure get aws_secret_access_key`
+
+aws ec2 describe-volumes \
+	--filters Name=tag-key,Values="Name" Name=tag-value,Values="$ROOT_VOL_NAME" \
+	--region ${ROOT_REGION} --output=json > volumes.tmp || exit -1
+
+ROOT_VOL=$(jq -r '.Volumes[0].VolumeId' volumes.tmp)
+ROOT_TYPE=$(jq -r '.Volumes[0].VolumeType' volumes.tmp)
+
+#echo "ROOT_TYPE=$ROOT_TYPE; ROOT_VOL=$ROOT_VOL";
+
+if [ "$ROOT_VOL_NAME" = "" ]
+then
+  echo "root volume lacks a Name tag";
+  exit -1;
+fi
+
+cat >user-data.tmp <<EOF
+#!/bin/sh
+echo AWSAccessKeyId=$AWS_ACCESS_KEY > /root/.aws.creds
+echo AWSSecretKey=$AWS_SECRET_KEY >> /root/.aws.creds
+
+apt-get update
+apt-get install -y jq
+apt-get install -y python-pip python-setuptools
+apt-get install -y git
+
+pip install awscli
+
+cd /root
+git clone --depth=1 https://github.com/slavivanov/ec2-spotter.git
+echo Got spotter scripts from github.
+
+cd ec2-spotter
+
+echo Swapping root volume
+./ec2spotter-remount-root  --force 1 --vol_name ${ROOT_VOL_NAME} --vol_region ${ROOT_REGION} --elastic_ip $ec2spotter_elastic_ip 
+EOF
+
+userData=$(base64 user-data.tmp | tr -d '\n');
+
+cat >specs.tmp <<EOF
+{
+  "ImageId" : "$ec2spotter_preboot_image_id",
+  "InstanceType": "$ec2spotter_instance_type",
+  "KeyName" : "$PUB_KEY",
+  "EbsOptimized": true,
+  "Placement": {
+     "AvailabilityZone": "$LAUNCH_ZONE"
+  },
+  "BlockDeviceMappings": [
+    {
+      "DeviceName": "/dev/sda1",
+      "Ebs": {
+        "DeleteOnTermination": true,
+        "VolumeType": "gp2",
+        "VolumeSize": 8
+      }
+    }
+  ],
+  "NetworkInterfaces": [
+      {
+        "DeviceIndex": 0,
+        "SubnetId": "${ec2spotter_subnet}",
+        "Groups": [ "${ec2spotter_security_group}" ],
+        "AssociatePublicIpAddress": true
+      }
+  ],
+  "UserData" : "${userData}"
+}
+EOF
+
+SPOT_REQUEST_ID=$(aws ec2 request-spot-instances --launch-specification file://specs.tmp --spot-price $ec2spotter_bid_price --output="text" --query="SpotInstanceRequests[*].SpotInstanceRequestId" --region ${LAUNCH_REGION})
+echo $SPOT_REQUEST_ID
+# Clean up
+rm user-data.tmp
+rm specs.tmp
+rm volumes.tmp
