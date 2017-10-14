@@ -94,12 +94,12 @@ def setup_serial_and_reset_arduinos():
 	# 3 volt Arduino Due, servos for output.
 	port_out = serial.Serial(name_out, 115200, timeout=0.0)
 
-	imu_port = serial.Serial('/dev/cu.usbmodem14141', 115200, timeout=0.0)
-	
+	#imu_port = serial.Serial('/dev/cu.usbmodem14241', 115200, timeout=0.0)
+	imu_port = None
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
-	imu_port.flush()
+	#imu_port.flush()
 	print("Serial setup complete.")
 	return port_in, port_out, imu_port
 
@@ -486,7 +486,7 @@ def main():
 		if new_aux1 != None:
 			aux1 = new_aux1
 
-		telemetry = process_imu(imu_port)
+		#telemetry = process_imu(imu_port)
 		# print("Throttle: {}".format(new_throttle))	
 
 		# Check to see if we should stop the car via the RC during TF control.
@@ -554,10 +554,10 @@ def main():
 			frame = camera_stream.read()
 			cv2.imwrite('/tmp/test.png', frame)
 
-		if telemetry is not None:
-			frames = [str(frame_count).zfill(5)]
-			telemetry = frames + telemetry + [throttle, steering]
-			data_logger.log_data(telemetry)
+		#if telemetry is not None:
+		#	frames = [str(frame_count).zfill(5)]
+		#	telemetry = frames + telemetry + [throttle, steering]
+		#	data_logger.log_data(telemetry)
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.
