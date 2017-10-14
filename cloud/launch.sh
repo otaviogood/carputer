@@ -1,7 +1,7 @@
 
 . ec2-spotter/fast_ai/start_spot_no_swap.sh --ami ami-d6ee1dae --securityGroupId sg-543aaf29 --subnetId subnet-a661f3c0
 
-aws ec2 attach-volume --volume-id vol-07775096bc43db288 --instance-id `cat spot_instance_id.txt` --device /dev/sdh
+aws ec2 attach-volume --volume-id vol-065ffc533aea29446 --instance-id `cat spot_instance_id.txt` --device /dev/sdh
 
 export SSH="ssh -i ~/.ssh/aws-key-fast-ai.pem ubuntu@`cat spot_instance_ip.txt`"
 echo $SSH
