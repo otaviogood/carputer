@@ -1,0 +1,7 @@
+.project
+.DS_Store
+.aws.creds
+specs.tmp
+user-data.tmp
+volumes.tmp
+my.conf
