@@ -24,6 +24,5 @@ python-dateutil==2.5.3
 pytz==2016.6.1
 simplegeneric==0.8.1
 six==1.10.0
-tensorflow==0.10.0rc0
 traitlets==4.2.2
 wcwidth==0.1.7
