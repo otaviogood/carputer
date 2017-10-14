@@ -46,7 +46,7 @@ class TrainingData:
         image = image.ravel()  # flatten the shape of the tensor.
         image = image[np.newaxis]  # make a batch of size 1.
         obj.pic_array = image
-        assert False  # add small pic array
+        # assert False  # add small pic array
         size = len(obj.pic_array)
         assert size == 1
 

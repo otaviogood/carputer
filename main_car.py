@@ -87,14 +87,14 @@ def setup_serial_and_reset_arduinos():
 		name_in = 'COM3'
 		name_out = 'COM4'
 	else:
-		name_in = '/dev/tty.usbmodem14211'  # 5v Arduino Uno (16 bit)
-		name_out = '/dev/tty.usbmodem14231'  # 3.3v Arduino Due (32 bit)
+		name_in = '/dev/cu.usbmodem14111'  # 5v Arduino Uno (16 bit)
+		name_out = '/dev/cu.usbmodem14131'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
 	port_out = serial.Serial(name_out, 115200, timeout=0.0)
 
-	imu_port = serial.Serial('/dev/tty.usbmodem14241', 115200, timeout=0.0)
+	imu_port = serial.Serial('/dev/cu.usbmodem14141', 115200, timeout=0.0)
 	
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
@@ -423,8 +423,8 @@ def main():
 	override_autonomous_control = False
 	train_on_this_image = True
 	vel = 0.0
-	last_odo_queue = []
-	last_millis_queue = []
+	last_odo_queue = [0] * (config.odo_delta + 1)
+	last_millis_queue = [0] * (config.odo_delta + 1)
 
 	# Check for insomnia
 	if platform.system() == "Darwin":
@@ -487,7 +487,7 @@ def main():
 			aux1 = new_aux1
 
 		telemetry = process_imu(imu_port)
-		
+		# print("Throttle: {}".format(new_throttle))	
 
 		# Check to see if we should stop the car via the RC during TF control.
 		# But also provide a way to re-engage autonomous control after an override.
@@ -556,7 +556,7 @@ def main():
 
 		if telemetry is not None:
 			frames = [str(frame_count).zfill(5)]
-			telemetry = frames + telemetry
+			telemetry = frames + telemetry + [throttle, steering]
 			data_logger.log_data(telemetry)
 
 		if override_autonomous_control:
