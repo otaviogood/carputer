@@ -80,7 +80,9 @@ def FixBadSignal(arr, index):
     c = arr[index + 1]
     da = abs(b-a)
     db = abs(c-b)
-    if (da > 45) and (db > 45) and (b < a) and (b < c):
+    # if (da > 45) and (db > 45) and (b < a) and (b < c):
+    # if ((b == 0) and (b < a) and (b < c)) or ((b >= 170) and (b > a) and (b < c)):
+    if (b == 0) or (b >= 179):
         arr[index] = arr[index - 1]
         print("fixed: " + str(index) + "  " + str(a) + " " + str(b) + " " + str(c))
 
@@ -93,7 +95,9 @@ def FixVeryBadSignal(arr, index):
     d = arr[index + 2]
     da = abs(b-a)
     db = abs(d-c)
-    if (da > 45) and (db > 45) and (b < a) and (c < d):
+    # if (da > 45) and (db > 45) and (b < a) and (c < d):
+    # if ((b == 0) and (b < a) and (b < c)) or ((b >= 170) and (b > a) and (b < c)):
+    if (b == 0) or (b >= 179):
         arr[index] = arr[index - 1]
         arr[index + 1] = arr[index + 2]
         print("fixed bad: " + str(index) + "  " + str(a) + " " + str(b) + " " + str(c) + " " + str(d))

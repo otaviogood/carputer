@@ -84,7 +84,7 @@ else: assert False  # Bad training mode in config.py.
 numTest = 8000
 skipTest = 1
 if config.running_on_laptop:
-    numTest = 384 * 2
+    numTest = 384 * 8
     skipTest = 1
 test_data.TrimArray(numTest, skipTest)
 assert test_data.NumSamples() >= net_model.n_steps
@@ -123,6 +123,7 @@ print '%s' % ' | '.join(map(str, debug_header_list))
 prev_sliding_window = 0
 prev_squared_diff = 0.0
 prev_squared_diff_throttle = 0.0
+best_total_score = 1000000000.0
 
 merged_summaries = tf.summary.merge_all()
 train_writer = tf.summary.FileWriter('train', sess.graph)
@@ -202,8 +203,12 @@ while iteration < 1000*128:
             plt.savefig(os.path.join(output_path, "progress.png"))
 
             # Save the model.
-            save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
-            config.store('last_tf_model', save_path)
+            cool_score = results_squared_diff + results_squared_diff_throttle * 2.0
+            if cool_score < best_total_score:
+              best_total_score = cool_score
+              save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
+              config.store('last_tf_model', save_path)
+              print("Saved: " + str(cool_score))
 
             # put the print after writing everything so it indicates things have been written.
             debug_iteration = format(iteration, '^10')
@@ -315,8 +320,12 @@ while iteration < 1000*128:
             # plt.savefig(os.path.join(output_path, "progress.png"))
 
             # Save the model.
-            save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
-            config.store('last_tf_model', save_path)
+            cool_score = results_squared_diff + results_squared_diff_throttle * 2.0
+            if cool_score < best_total_score:
+              best_total_score = cool_score
+              save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
+              config.store('last_tf_model', save_path)
+              print("Saved: " + str(cool_score))
 
             # put the print after writing everything so it indicates things have been written.
             debug_iteration = format(iteration, '^10')
