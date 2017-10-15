@@ -43,10 +43,14 @@ if __name__ == '__main__':
 	batch = TrainingData.fromfilename('test',os.path.expanduser('~')+'/training-data/')
 
 	for i in range(batch.NumSamples()):
-		test_batch = batch.GenBatch([i])
+		print("{} of {}".format(i, batch.NumSamples()))
+		test_batch = batch.GenNoisyBatch([i])
 
 		[flattened_gradient_image] = sess.run(
 		    [G],  feed_dict=test_batch.FeedDict(net_model))[0]
+
+		
+		flattened_gradient_image = np.mean(flattened_gradient_image, 0)
 
 		gradient_image = flattened_gradient_image.reshape((128,128,3))
 
@@ -54,7 +58,8 @@ if __name__ == '__main__':
 
 		gradient_image_mono_norm = (gradient_image_mono-gradient_image_mono.min())/(gradient_image_mono.max()-gradient_image_mono.min())
 
-		clip_min = gradient_image_mono_norm.max()*0.25 # Top energy?
+		clip_percent = 0.25
+		clip_min = gradient_image_mono_norm.max()*clip_percent# Top energy?
 		gradient_image_mono_norm[gradient_image_mono_norm<clip_min] = 0
 
 		scale = np.zeros(list(gradient_image_mono_norm.shape)+[3], dtype=np.float32)
@@ -62,7 +67,7 @@ if __name__ == '__main__':
 		scale[:,:,1] = gradient_image_mono_norm
 		scale[:,:,2] = 0.0
 
-		image_rgb = test_batch.pic_array.reshape((128,128,3))
+		image_rgb = batch.pic_array[i].reshape((128,128,3))
 		image_rgb_f = image_rgb.astype(np.float32)
 
 		#figure(figsize=(20,20))
@@ -79,7 +84,11 @@ if __name__ == '__main__':
 
 		fig = figure(figsize=(8,8))
 		imshow(dbg)
-		savefig('/Users/redsh/Downloads/tmp_%d.png'%i)
+		frame_number = str(i).zfill(5)
+		savefig('./analysis/visuals/tmp_%s.png'%frame_number)
+		print("Saving image: {}".format(frame_number))
+
+	print("Done:")
 
 
 

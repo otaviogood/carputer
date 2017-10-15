@@ -74,6 +74,24 @@ class TrainingData:
         result.throttle_array = np.array(batch_ys_regress_throttle)
         return result
 
+    def GenNoisyBatch(self, randIndexes):
+        noisy_samples = 16
+        noise_level = 16.0
+        randIndexes = range(randIndexes[0], randIndexes[0] + noisy_samples)
+        i0 = randIndexes[0]
+        batch_xs = [self.pic_array[i0] + np.random.randn(49152) * noise_level for index in randIndexes]
+        batch_xs_small = [self.pic_array_small[i0] for index in randIndexes]
+        batch_xs_vel = [self.vel_array[i0] for index in randIndexes]
+        batch_ys_regress = [self.steer_array[i0] for index in randIndexes]
+        batch_ys_regress_throttle = [self.throttle_array[i0] for index in randIndexes]
+        result = TrainingData()
+        result.pic_array = np.array(batch_xs)
+        result.pic_array_small = np.array(batch_xs_small)
+        result.vel_array = np.array(batch_xs_vel)
+        result.steer_array = np.array(batch_ys_regress)
+        result.throttle_array = np.array(batch_ys_regress_throttle)
+        return result
+
     def NumSamples(self):
         return len(self.pic_array)
 
