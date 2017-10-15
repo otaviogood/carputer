@@ -12,6 +12,7 @@ import os
 import os.path
 import random
 import time
+from shutil import copyfile
 
 from docopt import docopt
 # http://stackoverflow.com/questions/4931376/generating-matplotlib-graphs-without-a-running-x-server
@@ -84,7 +85,7 @@ else: assert False  # Bad training mode in config.py.
 numTest = 8000
 skipTest = 1
 if config.running_on_laptop:
-    numTest = 384 * 8
+    numTest = 8500# 384 * 8
     skipTest = 1
 test_data.TrimArray(numTest, skipTest)
 assert test_data.NumSamples() >= net_model.n_steps
@@ -208,6 +209,7 @@ while iteration < 1000*128:
               best_total_score = cool_score
               save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
               config.store('last_tf_model', save_path)
+              copyfile(os.path.join(output_path, "debug.html"), os.path.join(output_path, "debug_best.html"))
               print("Saved: " + str(cool_score))
 
             # put the print after writing everything so it indicates things have been written.
@@ -325,6 +327,7 @@ while iteration < 1000*128:
               best_total_score = cool_score
               save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
               config.store('last_tf_model', save_path)
+              copyfile(os.path.join(output_path, "debug.html"), os.path.join(output_path, "debug_best.html"))
               print("Saved: " + str(cool_score))
 
             # put the print after writing everything so it indicates things have been written.
