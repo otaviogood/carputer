@@ -60,3 +60,13 @@ try :
 except:
 	pass
 
+
+
+
+CAR_HOST='omba.local'
+CAR_DIR='/Users/otaviogood/Documents/devmac/carputer/'
+CAR_SYNC_LOCAL_DIR='/Users/otaviogood/training-images-sync/'
+CAR_SYNC_METHOD='airdrop'
+CAR_AIRDROP_FOLDER='/Users/otaviogood/Downloads/'
+
+stuck_override=True

@@ -72,6 +72,11 @@ odometer_ticks = 0
 button_arduino_out = 0
 button_arduino_in = 0
 
+# Stuck throttle override 
+last_time_when_nonzero_velocity = -1
+stuck_override_start = -1
+stuck_override_active = False
+
 imu_stream = ''
 
 
@@ -535,6 +540,27 @@ def main():
 				#throttle = 0
 				pass
 				
+			# Stuck: throttle override
+			# If the car is stuck for more than 2 s, override and full throttle.
+			if config.stuck_override: # TODO config.py
+				global last_time_when_nonzero_velocity, stuck_override_start, stuck_override_active
+				stt = time.time()
+
+				if vel > 0.001:
+					last_time_when_nonzero_velocity = stt
+				
+				if stuck_override_active:
+					throttle = 160
+
+					if stt - stuck_override_start > 1.0:
+						stuck_override_active = False
+
+				else:
+					if stt - last_time_when_nonzero_velocity > 1.0: # this is true at the beginning.
+						stuck_override_active = True
+						stuck_override_start = stt
+						last_time_when_nonzero_velocity = stt
+
 
 			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
