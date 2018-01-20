@@ -132,7 +132,7 @@ while iteration < 1000*128:
     if config.neural_net_mode == 'alexnet':
         randIndexes = random.sample(xrange(train_data.NumSamples()), min(TrainingData.batch_size, train_data.NumSamples()))
         batch = train_data.GenBatch(randIndexes)
-        train_feed_dict = batch.FeedDict(net_model, 0.6)
+        train_feed_dict = batch.FeedDict(net_model, 1.0, is_training=True)
         [summary_str, _, train_steer_diff] = sess.run(
             [merged_summaries, net_model.train_step, net_model.squared_diff], feed_dict=train_feed_dict)
         train_writer.add_summary(summary_str, iteration)
@@ -151,7 +151,7 @@ while iteration < 1000*128:
             results_regularizers = 0.0
             for indexes in test_list:
                 test_batch = test_data.GenBatch(indexes)
-                test_feed_dict = test_batch.FeedDict(net_model, 1.0)
+                test_feed_dict = test_batch.FeedDict(net_model, 1.0, is_training=False)
 
                 [a0, b0, c0, d0, e0, f0] = sess.run([net_model.steering_regress_result,
                                net_model.throttle_regress_result,
@@ -183,7 +183,7 @@ while iteration < 1000*128:
             html.draw_graph([test_data.vel_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'Speed')
 
             html.write_html(test_data, tf.get_default_graph(),
-                            sess, results_steering_regress, results_throttle_regress, net_model, test_data.FeedDict(net_model))
+                            sess, results_steering_regress, results_throttle_regress, net_model, test_data.FeedDict(net_model, is_training=False))
             html.write_file(output_path)
 
             accuracy_check_iterations.append(iteration)

@@ -42,6 +42,38 @@ def flatten_batch(tensor):
     return tf.reshape(tensor, [-1, dim])  # -1 means "all"
 
 
+def batch_norm(name, x, n_out, phase_train, convolutional=False, scope='BN'):
+    """
+    Args:
+        x:           Tensor
+        n_out:       integer, depth of input maps
+        phase_train: tf.bool, true indicates training phase
+        convolutional:tf.bool, true is conv layer, false is fully connected layer
+        scope:       string, variable scope
+    Return:
+        normed:      batch-normalized maps
+    """
+    # n_out = x.get_shape().as_list()[-1]
+    with tf.variable_scope(scope+name):
+        init_beta = tf.constant(0.0, shape=[n_out], dtype=tf.float32)
+        init_gamma = tf.constant(1.0, shape=[n_out],dtype=tf.float32)
+        beta = tf.get_variable(name='beta'+name, dtype=tf.float32, initializer=init_beta, regularizer=None, trainable=True)
+        gamma = tf.get_variable(name='gamma'+name, dtype=tf.float32, initializer=init_gamma, regularizer=None, trainable=True)
+        if convolutional:
+            batch_mean, batch_var = tf.nn.moments(x, [0, 1, 2])
+        else:
+            batch_mean, batch_var = tf.nn.moments(x, [0])
+        ema = tf.train.ExponentialMovingAverage(decay=0.995)
+
+        def mean_var_with_update():
+            ema_apply_op = ema.apply([batch_mean, batch_var])
+            with tf.control_dependencies([ema_apply_op]):
+                return tf.identity(batch_mean), tf.identity(batch_var)
+
+        mean, var = tf.cond(phase_train, mean_var_with_update, lambda: (ema.average(batch_mean), ema.average(batch_var)))
+        normed = tf.nn.batch_normalization(x, mean, var, beta, gamma, 1e-3)
+    return normed
+
 class NNModel:
     # static class vars
 
@@ -63,29 +95,36 @@ class NNModel:
         # misc
         self.keep_prob = tf.placeholder(tf.float32)
         self.train_mode = tf.placeholder(tf.float32)
+        self.is_training = tf.placeholder(tf.bool)
 
         # Reshape and put input image in range [-0.5..0.5]
-        x_image = tf.reshape(self.in_image, [-1, config.width, config.height, config.img_channels])  / 255.0 - 0.5
+        x_image = tf.reshape(self.in_image, [-1, config.width, config.height, config.img_channels]) / 255.0 - 0.5
 
         # Neural net layers - first convolution, then fully connected, then final transform to output
-        act = self.conv_layer(x_image, 8, 5, 'conv1', 'shared_conv')
-        # act = max_pool_2x2(x_image)
-        # act = max_pool_2x2(act)
-        # act = max_pool_2x2(act)
+        # act = self.conv_layer(x_image, 8, 5, 'conv1', 'shared_conv')
+        act = avg_pool_2x2(x_image)
+        # act = avg_pool_2x2(act)
+        # act = avg_pool_2x2(act)
         act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
         act = self.conv_layer(act, 16, 5, 'conv3', 'shared_conv')
         act = self.conv_layer(act, 32, 5, 'conv4', 'shared_conv')
+        # act = self.conv_layer(act, 12, 3, 'conv2a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer(act, 12, 3, 'conv2b', 'shared_conv', do_pool=True)
+        # act = self.conv_layer(act, 16, 3, 'conv3a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer(act, 16, 3, 'conv3b', 'shared_conv', do_pool=True)
+        # act = self.conv_layer(act, 32, 3, 'conv4a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer(act, 32, 3, 'conv4b', 'shared_conv', do_pool=True)
 
         act_flat = flatten_batch(act)
-        act = self.fc_layer(act_flat, 1024, 'fc1', 'shared_fc', True)
+        act = self.fc_layer(act_flat, 256, 'fc1', 'shared_fc', True, batch_norm=False)
 
         # -------------------- Insert discriminator here for domain adaptation --------------------
         # Sneak the speedometer value into the matrix
         in_speed_shaped = tf.reshape(self.in_speed, [-1, 1])
         act_concat = tf.concat([act, in_speed_shaped], 1)
 
-        fc2_num_outs = 1024
-        act = self.fc_layer(act_concat, fc2_num_outs, 'fc2', 'main', False)
+        fc2_num_outs = 256
+        act = self.fc_layer(act_concat, fc2_num_outs, 'fc2', 'main', False, batch_norm=False)
 
         # Final transform without relu. Not doing l2 regularization on this because it just feels wrong.
         num_outputs = 1 + 1
@@ -118,21 +157,28 @@ class NNModel:
         self.train_step = optimizerA.minimize(self.loss, var_list=main_train_vars)
 
 
-    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name):
+    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name, do_pool = True):
         channels_in = tensor.get_shape().as_list()[3]
         W_conv = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='W_' + name, coll=scope_name)
         self.l2_collection.append(W_conv)
         b_conv = bias_variable([channels_out], name='b_' + name, coll=scope_name)
-        h_conv = tf.nn.relu(conv2d(tensor, W_conv) + b_conv)
-        return max_pool_2x2(h_conv)
+        trans = conv2d(tensor, W_conv) + b_conv  # don't need the bias if batch norm is working.
+        normed = batch_norm(name, trans, channels_out, self.is_training, convolutional=True, scope='BN')
+        h_conv = tf.nn.relu(normed)
+        if do_pool:
+            h_conv = avg_pool_2x2(h_conv)
+        return h_conv
 
 
-    def fc_layer(self, tensor, channels_out, name, scope_name, dropout):
+    def fc_layer(self, tensor, channels_out, name, scope_name, dropout, batch_norm = False):
         channels_in = tensor.get_shape().as_list()[1]
         W_fc = weight_variable([channels_in, channels_out], channels_in, channels_out, name='W_' + name, coll=scope_name)
         self.l2_collection.append(W_fc)
         b_fc = bias_variable([channels_out], name='b_' + name, coll=scope_name)
-        h_fc = tf.nn.relu(tf.matmul(tensor, W_fc) + b_fc)
+        trans = tf.matmul(tensor, W_fc) + b_fc  # don't need the bias if batch norm is working.
+        if batch_norm:
+            trans = batch_norm(name, trans, channels_out, self.is_training, convolutional=False, scope='BN')
+        h_fc = tf.nn.relu(trans)
         if dropout:
             h_fc = tf.nn.dropout(h_fc, self.keep_prob)
         return h_fc

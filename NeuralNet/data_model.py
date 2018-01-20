@@ -84,7 +84,7 @@ class TrainingData:
         self.steer_array = self.steer_array[:size:skip]
         self.throttle_array = self.throttle_array[:size:skip]
 
-    def FeedDict(self, net_model, dropout_keep = 1.0, train_modep = 0.0):
+    def FeedDict(self, net_model, dropout_keep = 1.0, train_modep = 0.0, is_training = False):
         return {
             net_model.in_image: self.pic_array,
             net_model.in_image_small: self.pic_array_small,
@@ -93,6 +93,7 @@ class TrainingData:
             net_model.throttle_regress_: self.throttle_array,
             net_model.keep_prob: dropout_keep,
             net_model.train_mode: train_modep,
+            net_model.is_training: is_training,
         }
 
     def GenBatchLSTM(self, net_model, randIndexes):
