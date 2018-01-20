@@ -1,0 +1,207 @@
+#!/bin/bash
+# "Phase 2" this script is invoked inside of the spot VM at boot time to find the root volume.
+
+manual_invoke=1
+
+# Read the input args
+while [[ $# -gt 0 ]]
+do
+key="$1"
+case $key in
+	--force)
+	manual_invoke=0
+	shift # past argument
+	;;
+    --vol_name)
+    ROOT_VOL_NAME="$2"
+    shift # past argument
+    ;;
+    --vol_region)
+    ROOT_REGION="$2"
+    shift # past argument
+    ;;
+    --elastic_ip)
+    ec2spotter_elastic_ip="$2"
+    shift # past argument
+    ;;
+    *)
+            # unknown option
+    ;;
+esac
+shift # past argument or value
+done
+
+if [ manual_invoke = 1 ]
+then 
+  # this is here just to cover accidental invocation from the command-line. it should "never happen"
+  echo "This script is destructive when invoked at the wrong time. If you are seeing this message you are doing something wrong."
+  exit -1
+fi
+
+if [ "x$ROOT_VOL_NAME" = "x" ]; then echo "missing volume name"; exit -1; fi
+
+
+if [ "x$ROOT_REGION" = "x" ]
+then 
+	echo "missing volume region"; 
+	exit -1; 
+fi
+
+# Get Instance ID and current zone from AWS
+export INSTANCE_ID=`curl -s http://169.254.169.254/latest/meta-data/instance-id`
+export SPOT_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
+export SPOT_REGION=${SPOT_ZONE::-1} # Get the region by stripping the last character of the ROOT_ZONE
+
+export AWS_CREDENTIAL_FILE=/root/.aws.creds
+. /root/.aws.creds
+export AWS_ACCESS_KEY=$AWSAccessKeyId
+export AWS_SECRET_KEY=$AWSSecretKey
+
+# acquire the elastic ip
+if ! [ "$ec2spotter_elastic_ip"x = x ]
+then
+	aws ec2 associate-address --instance-id $INSTANCE_ID --allocation-id $ec2spotter_elastic_ip --allow-reassociation --region ${SPOT_REGION}
+	echo "Elastic IP associated."
+fi
+
+echo "Looking for a volume in $ROOT_REGION with Name = $ROOT_VOL_NAME"
+aws ec2 describe-volumes \
+        --filters Name=tag-key,Values="Name" Name=tag-value,Values="$ROOT_VOL_NAME" \
+        --region ${ROOT_REGION} > volumes.tmp || exit -1
+
+ROOT_ZONE=$(jq -r '.Volumes[0].AvailabilityZone' volumes.tmp)
+ROOT_VOL=$(jq -r '.Volumes[0].VolumeId' volumes.tmp)
+ROOT_TYPE=$(jq -r '.Volumes[0].VolumeType' volumes.tmp)
+
+# Are we copying the volume from the same region?
+if [[ $ROOT_ZONE != $SPOT_ZONE ]]; then
+    # need to copy the volume across
+    echo "Volume $ROOT_VOL is in another Availability Zone"
+    echo "Creating a snapshot of the volume"
+    # SNAPSHOT=$(${APIBIN}/ec2-create-snapshot --region ${ROOT_REGION} $ROOT_VOL --description 'ec2-spotter temporary snapshot ok to delete' | awk '{print $2}')
+	aws ec2 create-snapshot --region ${ROOT_REGION} --volume-id $ROOT_VOL --description 'ec2-spotter temporary snapshot ok to delete' > snapshot.tmp || exit -1
+	SNAPSHOT=$(jq -r '.SnapshotId' snapshot.tmp)
+
+    echo "Snapshot $SNAPSHOT created. Waiting for completion"
+    # Keep checking to see that snapshot has been created
+    count=0
+    while /bin/true
+    do
+        sleep 5
+        eval count=$((count+5))
+        echo "... $count seconds gone. Still waiting..."
+        # STATUS=$(${APIBIN}/ec2-describe-snapshots --region ${ROOT_REGION} ${SNAPSHOT} | grep completed)
+		STATUS=$(aws ec2 describe-snapshots --snapshot-ids ${SNAPSHOT} --region ${ROOT_REGION} | grep completed)
+        [[ ! -z $STATUS ]] && break
+    done
+    echo "Snapshot $SNAPSHOT created successfully"
+    echo "------------------------------------------------"
+    echo ""
+    
+    if [[ $SPOT_REGION != $ROOT_REGION ]]; then
+	    # NEW_SNAPSHOT=$(${APIBIN}/ec2-copy-snapshot -r ${ROOT_REGION} -s ${SNAPSHOT} | awk '{print $2}')
+		aws ec2 copy-snapshot \
+			--source-region ${ROOT_REGION} --region ${SPOT_REGION} \
+			--source-snapshot-id ${SNAPSHOT} --destination-region ${SPOT_REGION} > new_snapshot.tmp || exit -1
+		NEW_SNAPSHOT=$(jq -r '.SnapshotId' new_snapshot.tmp)
+	    echo "Copying snapshot from $ROOT_REGION to $SPOT_REGION with name $NEW_SNAPSHOT. Waiting for completion"		
+			
+	    # Keep checking to see that snapshot has been copied		
+	    count=0		
+	    while /bin/true		
+	    do		
+			sleep 5		
+			eval count=$((count+5))		
+			echo "... $count seconds gone. Still waiting..."		
+			# STATUS=$(${APIBIN}/ec2-describe-snapshots ${NEW_SNAPSHOT} | grep completed)
+			STATUS=$(aws ec2 describe-snapshots --snapshot-ids ${NEW_SNAPSHOT} --region ${SPOT_REGION} | grep completed)
+			
+	       [[ ! -z $STATUS ]] && break		
+	    done		
+			
+	    echo "Snapshot $NEW_SNAPSHOT created successfully"		
+	    echo "------------------------------------------------"		
+	    echo ""
+    else
+	    NEW_SNAPSHOT=$SNAPSHOT
+    fi
+
+    # create volume from this new snapshot
+    #NEW_VOLUME=$(${APIBIN}/ec2-create-volume --snapshot ${NEW_SNAPSHOT} -z ${SPOT_ZONE} --type $ROOT_TYPE | awk '{print $2}')
+	aws ec2 create-volume --snapshot-id ${NEW_SNAPSHOT} --availability-zone ${SPOT_ZONE} --volume-type $ROOT_TYPE --region ${SPOT_REGION} > new_volume.tmp || exit -1
+	NEW_VOLUME=$(jq -r '.VolumeId' new_volume.tmp)
+    echo "Creating volume $NEW_VOLUME from $NEW_SNAPSHOT. Waiting for completion"
+    
+    # Keep checking to see that volume has been created
+    count=0
+    while /bin/true
+    do
+        sleep 5
+        eval count=$((count+5))
+        echo "... $count seconds gone. Still waiting..."
+        #STATUS=$(${APIBIN}/ec2-describe-volumes ${NEW_VOLUME} | grep available)
+		STATUS=$(aws ec2 describe-volumes --volume-ids ${NEW_VOLUME} --region ${SPOT_REGION} | grep available)
+        [[ ! -z $STATUS ]] && break
+    done
+    
+    echo "Volume $NEW_VOLUME created successfully"
+    echo "------------------------------------------------"
+
+    echo "Renaming the old volume"
+    aws ec2 create-tags --resources ${ROOT_VOL} --tags Key=Name,Value="${ROOT_VOL_NAME}-is-now-$NEW_VOLUME" --region ${ROOT_REGION}
+	echo "Renaming the new volume"
+	aws ec2 create-tags --resources ${NEW_VOLUME} --tags Key=Name,Value="${ROOT_VOL_NAME}" --region ${SPOT_REGION}
+    PERSISTENT_ROOT_VOLUME=${NEW_VOLUME}
+else
+    echo "Using the volume as-is, no migration needed"
+    PERSISTENT_ROOT_VOLUME=${ROOT_VOL}
+fi
+
+echo ""
+echo "Attaching volume $PERSISTENT_ROOT_VOLUME as /dev/sdf"
+# Attach volume
+#${APIBIN}/ec2-attach-volume $PERSISTENT_ROOT_VOLUME -d /dev/sdf --instance $INSTANCE_ID || exit -1
+aws ec2 attach-volume --volume-id $PERSISTENT_ROOT_VOLUME --instance-id $INSTANCE_ID --device /dev/sdf --region ${SPOT_REGION} || exit -1
+
+while ! lsblk /dev/xvdf
+do
+  echo "waiting for device to attach"
+  sleep 5
+done
+
+# Remove .aws.creds file because it's not very safe to keep them on a random server
+unset AWS_ACCESS_KEY
+unset AWS_SECRET_KEY
+unset AWSAccessKeyId
+unset AWSSecretKey
+rm $AWS_CREDENTIAL_FILE
+
+# Ready up for the swap
+DEVICE=/dev/xvdf1
+NEWMNT=/permaroot
+OLDMNT=old-root
+e2label $DEVICE permaroot
+tune2fs $DEVICE -U `uuidgen`
+mkdir $NEWMNT
+
+#
+# point of no return... 
+# modify /sbin/init on the ephemeral volume to chain-load from the persistent EBS volume, and then reboot.
+#
+mv /sbin/init /sbin/init.backup
+cat >/sbin/init <<EOF11
+#!/bin/sh
+mount $DEVICE $NEWMNT
+[ ! -d $NEWMNT/$OLDMNT ] && mkdir -p $NEWMNT/$OLDMNT
+
+cd $NEWMNT
+pivot_root . ./$OLDMNT
+
+for dir in /dev /proc /sys /run; do
+    echo "Moving mounted file system ${OLDMNT}\${dir} to \$dir."
+    mount --move ./${OLDMNT}\${dir} \${dir}
+done
+exec chroot . /sbin/init
+EOF11
+chmod +x /sbin/init
+shutdown -r now

@@ -72,6 +72,11 @@ odometer_ticks = 0
 button_arduino_out = 0
 button_arduino_in = 0
 
+# Stuck throttle override 
+last_time_when_nonzero_velocity = -1
+stuck_override_start = -1
+stuck_override_active = False
+
 imu_stream = ''
 
 
@@ -87,19 +92,19 @@ def setup_serial_and_reset_arduinos():
 		name_in = 'COM3'
 		name_out = 'COM4'
 	else:
-		name_in = '/dev/tty.usbmodem14211'  # 5v Arduino Uno (16 bit)
-		name_out = '/dev/tty.usbmodem14231'  # 3.3v Arduino Due (32 bit)
+		name_in = '/dev/cu.usbmodem14111'  # 5v Arduino Uno (16 bit)
+		name_out = '/dev/cu.usbmodem14131'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
 	port_out = serial.Serial(name_out, 115200, timeout=0.0)
 
-	imu_port = serial.Serial('/dev/tty.usbmodem14241', 115200, timeout=0.0)
-	
+	#imu_port = serial.Serial('/dev/cu.usbmodem14241', 115200, timeout=0.0)
+	imu_port = None
 	# Flush for good luck. Not sure if this does anything. :)
 	port_in.flush()
 	port_out.flush()
-	imu_port.flush()
+	#imu_port.flush()
 	print("Serial setup complete.")
 	return port_in, port_out, imu_port
 
@@ -423,8 +428,8 @@ def main():
 	override_autonomous_control = False
 	train_on_this_image = True
 	vel = 0.0
-	last_odo_queue = []
-	last_millis_queue = []
+	last_odo_queue = [0] * (config.odo_delta + 1)
+	last_millis_queue = [0] * (config.odo_delta + 1)
 
 	# Check for insomnia
 	if platform.system() == "Darwin":
@@ -486,8 +491,8 @@ def main():
 		if new_aux1 != None:
 			aux1 = new_aux1
 
-		telemetry = process_imu(imu_port)
-		
+		#telemetry = process_imu(imu_port)
+		# print("Throttle: {}".format(new_throttle))	
 
 		# Check to see if we should stop the car via the RC during TF control.
 		# But also provide a way to re-engage autonomous control after an override.
@@ -535,6 +540,27 @@ def main():
 				#throttle = 0
 				pass
 				
+			# Stuck: throttle override
+			# If the car is stuck for more than 2 s, override and full throttle.
+			if config.stuck_override: # TODO config.py
+				global last_time_when_nonzero_velocity, stuck_override_start, stuck_override_active
+				stt = time.time()
+
+				if vel > 0.001:
+					last_time_when_nonzero_velocity = stt
+				
+				if stuck_override_active:
+					throttle = 160
+
+					if stt - stuck_override_start > 1.0:
+						stuck_override_active = False
+
+				else:
+					if stt - last_time_when_nonzero_velocity > 1.0: # this is true at the beginning.
+						stuck_override_active = True
+						stuck_override_start = stt
+						last_time_when_nonzero_velocity = stt
+
 
 			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
@@ -554,10 +580,10 @@ def main():
 			frame = camera_stream.read()
 			cv2.imwrite('/tmp/test.png', frame)
 
-		if telemetry is not None:
-			frames = [str(frame_count).zfill(5)]
-			telemetry = frames + telemetry
-			data_logger.log_data(telemetry)
+		#if telemetry is not None:
+		#	frames = [str(frame_count).zfill(5)]
+		#	telemetry = frames + telemetry + [throttle, steering]
+		#	data_logger.log_data(telemetry)
 
 		if override_autonomous_control:
 			# Full brake and neutral steering.

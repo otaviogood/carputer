@@ -1,1 +1,5 @@
 *.pyc
+venv
+venv2
+train/
+dyn_config.json
