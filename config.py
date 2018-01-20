@@ -70,3 +70,4 @@ CAR_SYNC_METHOD='airdrop'
 CAR_AIRDROP_FOLDER='/Users/otaviogood/Downloads/'
 
 stuck_override=True
+use_override_random_error=True

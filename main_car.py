@@ -79,6 +79,37 @@ stuck_override_active = False
 
 imu_stream = ''
 
+class override_state_random_error(object):
+	def __init__(self):
+		self.state = 'driving'
+		self.t0 = None
+		self.random_steering = 0.0
+
+	def tick(self, t):
+		if self.t0 is None:
+			self.t0 = t
+
+		# State changes
+		if self.state == 'driving':
+			
+			if t-self.t0 > 5.0:
+				self.state = 'override'
+				self.t0 = t
+				# Maybe add throttle later
+				self.random_steering = np.clip(90 + np.random.normal(90), -90, 90)
+
+		elif self.state == 'override':
+			
+			if t-self.t0 > 0.25:
+				self.state = 'driving'
+				self.t0 = t
+
+		# State handling
+		if state == 'override':
+			global throttle,streering
+			steering = self.random_steering
+
+override_random_error = override_state_random_error()
 
 def setup_serial_and_reset_arduinos():
 	# This will set up the serial ports. If they are already set up, it will
@@ -564,7 +595,11 @@ def main():
 
 			# steering, throttle = do_tensor_flow(frame, odometer_ticks - last_odometer_reset, vel)
 
-		if we_are_recording and currently_running:
+		global override_random_error
+		if we_are_recording and currently_running and config.use_override_random_error:
+			override_random_error.tick(loop_start_time)
+
+		if we_are_recording and currently_running and override_random_error.state != 'override':
 			# TODO(matt): also record vel in filename for tf?
 			# Read a frame from the camera.
 			frame = camera_stream.read()
