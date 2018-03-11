@@ -17,13 +17,40 @@ def weight_variable_c(shape, name=None, coll=None):
         return tf.get_variable(name, shape, initializer=tf.random_normal_initializer(stddev=1.0 / np.sqrt(fanIn / 2.0)))
 
 
-def bias_variable(shape, name=None, coll=None):
+def weight_variable_c_const(shape, init_val, name=None, coll=None):
     with tf.variable_scope(coll):
-        return tf.get_variable(name, shape, initializer=tf.constant_initializer(0.0))
+        return tf.get_variable(name, shape, initializer=tf.constant_initializer(init_val))
+
+
+def bias_variable(shape, init_val=0.0, name=None, coll=None):
+    with tf.variable_scope(coll):
+        return tf.get_variable(name, shape, initializer=tf.constant_initializer(init_val))
 
 
 def conv2d(x, W):
     return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
+
+
+# experimental stuff that isn't working.
+# returns [batch, height, width, channels]
+def conv_superpool_2x2(x, in_channels, name, coll):
+    # W_conv = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='W_' + name, coll=scope_name)
+    # kernels = [[[[ 0.25,  0.25], [ 0.25,  0.25]],
+    #             [[-0.25, -0.25], [ 0.25,  0.25]],
+    #             [[-0.25,  0.25], [-0.25,  0.25]],
+    #             [[-0.25,  0.25], [ 0.25, -0.25]]]]
+    kernels = [[ [[ 0.25]], [[ 0.25]] ], [ [[ 0.25]], [[ 0.25]] ]]
+    # kernels = [[ [[ 0.25]], [[ 0.25]] ], [ [[ 0.25]], [[ 0.25]] ],
+    #            [ [[-0.25]], [[-0.25]] ], [ [[ 0.25]], [[ 0.25]] ],
+    #            [ [[-0.25]], [[ 0.25]] ], [ [[-0.25]], [[ 0.25]] ],
+    #            [ [[-0.25]], [[ 0.25]] ], [ [[ 0.25]], [[-0.25]] ]]
+    kernels = np.array(kernels, dtype=np.float32)
+    kernels = np.repeat(kernels, in_channels, axis=2)  # can I do this as a broadcast???
+    b = bias_variable([in_channels], name='b_' + name, coll=coll)
+    with tf.variable_scope(coll):
+        v = tf.get_variable(name, initializer=tf.constant(kernels))
+        # v = tf.constant(kernels, name=name)
+    return tf.nn.depthwise_conv2d(x, v, strides=[1, 2, 2, 1], padding='VALID') + b
 
 
 def max_pool_2x2(x):
@@ -33,6 +60,34 @@ def max_pool_2x2(x):
 def avg_pool_2x2(x):
     return tf.nn.avg_pool(x, ksize=[1, 2, 2, 1],
                           strides=[1, 2, 2, 1], padding='SAME')
+
+
+# Swish activation function: https://arxiv.org/pdf/1710.05941.pdf
+def Swish(x, name=None, coll=None):
+    channels_in = x.get_shape().as_list()[3]
+    with tf.variable_scope(coll):
+        beta = bias_variable([channels_in], init_val=1.0, name='b_' + name, coll=coll)
+    return tf.nn.sigmoid(beta * x) * x
+
+
+def LeakyTrainable(x, name=None, coll=None):
+    channels_in = x.get_shape().as_list()[3]
+    with tf.variable_scope(coll):
+        beta = bias_variable([channels_in], init_val=0.0, name='b_' + name, coll=coll)
+    return tf.maximum(x * beta, x)
+
+
+# shake-shake regularization! I'm a fan. https://arxiv.org/abs/1705.07485
+def ShakeShake(tensorA, tensorB, rand_shape, is_training):
+    alpha = tf.random_uniform(rand_shape)  # [batch_size, 1, 1, channels_out]
+    beta = tf.random_uniform(rand_shape)
+    # tricky stuff to make the backwards pass have a different random than
+    # the forward pass. Weirdest thing about shake-shake.
+    shake_1 = beta * tensorA + tf.stop_gradient(alpha * tensorA - beta * tensorA)
+    shake_2 = (1 - beta) * tensorB + tf.stop_gradient((1 - alpha) * tensorB - (1 - beta) * tensorB)
+    def true_fun(): return shake_1 + shake_2
+    def false_fun(): return (tensorA + tensorB) * 0.5
+    return tf.cond(is_training, true_fun, false_fun)
 
 
 # https://stackoverflow.com/questions/36668542/flatten-batch-in-tensorflow
@@ -100,23 +155,38 @@ class NNModel:
         # Reshape and put input image in range [-0.5..0.5]
         x_image = tf.reshape(self.in_image, [-1, config.width, config.height, config.img_channels]) / 255.0 - 0.5
 
-        # Neural net layers - first convolution, then fully connected, then final transform to output
+        # ---- Neural net layers - first convolution, then fully connected, then final transform to output ----
         # act = self.conv_layer(x_image, 8, 5, 'conv1', 'shared_conv')
-        act = avg_pool_2x2(x_image)
+        act = avg_pool_2x2(x_image)  # downsample to 64x64 input image because we can.
+        first, second = tf.split(act, 2, axis=1)  # cut off image above horizon. Now we are 64x32 only looking at ground.
+        act = second
+
+        # rand_noise = act + tf.random_normal(tf.shape(act))*0.1
+        # act = tf.cond(self.is_training, lambda: rand_noise, lambda: act)
+
+        self.visualizations["down_image"] = ("rgb_batch_steps", act)
         # act = avg_pool_2x2(act)
         # act = avg_pool_2x2(act)
-        act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
-        act = self.conv_layer(act, 16, 5, 'conv3', 'shared_conv')
-        act = self.conv_layer(act, 32, 5, 'conv4', 'shared_conv')
-        # act = self.conv_layer(act, 12, 3, 'conv2a', 'shared_conv', do_pool=False)
-        # act = self.conv_layer(act, 12, 3, 'conv2b', 'shared_conv', do_pool=True)
-        # act = self.conv_layer(act, 16, 3, 'conv3a', 'shared_conv', do_pool=False)
-        # act = self.conv_layer(act, 16, 3, 'conv3b', 'shared_conv', do_pool=True)
-        # act = self.conv_layer(act, 32, 3, 'conv4a', 'shared_conv', do_pool=False)
-        # act = self.conv_layer(act, 32, 3, 'conv4b', 'shared_conv', do_pool=True)
+        act = self.conv_layer_shake(act, 12, 5, 'conv2', 'shared_conv', visualize=True)
+        act = self.conv_layer_shake(act, 16, 5, 'conv3', 'shared_conv')
+        act = self.conv_layer_shake(act, 64, 5, 'conv4', 'shared_conv')
+
+        # act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
+        # act = self.conv_layer(act, 16, 5, 'conv3', 'shared_conv')
+        # act = self.conv_layer(act, 32, 5, 'conv4', 'shared_conv')
+
+        # act = self.conv_layer_shake(act, 12, 3, 'conv2a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer_shake(act, 12, 3, 'conv2b', 'shared_conv', do_pool=True)
+        # act = self.conv_layer_shake(act, 16, 3, 'conv3a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer_shake(act, 16, 3, 'conv3b', 'shared_conv', do_pool=True)
+        # act = self.conv_layer_shake(act, 32, 3, 'conv4a', 'shared_conv', do_pool=False)
+        # act = self.conv_layer_shake(act, 32, 3, 'conv4b', 'shared_conv', do_pool=True)
 
         act_flat = flatten_batch(act)
-        act = self.fc_layer(act_flat, 256, 'fc1', 'shared_fc', True, batch_norm=False)
+        act = self.fc_layer(act_flat, 128, 'fc1', 'shared_fc', True, do_batch_norm=False)
+        # actA = self.fc_layer(act_flat, 128, 'fc1A', 'shared_fc', True, do_batch_norm=False)
+        # actB = self.fc_layer(act_flat, 128, 'fc1B', 'shared_fc', True, do_batch_norm=False)
+        # act = ShakeShake(actA, actB, tf.shape(actA), self.is_training)
 
         # -------------------- Insert discriminator here for domain adaptation --------------------
         # Sneak the speedometer value into the matrix
@@ -124,14 +194,17 @@ class NNModel:
         act_concat = tf.concat([act, in_speed_shaped], 1)
 
         fc2_num_outs = 256
-        act = self.fc_layer(act_concat, fc2_num_outs, 'fc2', 'main', False, batch_norm=False)
+        act = self.fc_layer(act_concat, fc2_num_outs, 'fc2', 'main', False, do_batch_norm=False)
+        # actA = self.fc_layer(act_concat, fc2_num_outs, 'fc2A', 'main', False, do_batch_norm=False)
+        # actB = self.fc_layer(act_concat, fc2_num_outs, 'fc2B', 'main', False, do_batch_norm=False)
+        # act = ShakeShake(actA, actB, tf.shape(actA), self.is_training)
 
         # Final transform without relu. Not doing l2 regularization on this because it just feels wrong.
         num_outputs = 1 + 1
-        W_fc_final = weight_variable([fc2_num_outs, num_outputs], fc2_num_outs, num_outputs, name='W_fc4', coll='main')
-        # self.l2_collection.append(W_fc4)
-        b_fc_final = bias_variable([num_outputs], name='b_fc4', coll='main')
-        final_activations = tf.matmul(act, W_fc_final) + b_fc_final
+        final_activations = self.fc_layer(act, num_outputs, 'fc4', 'main', False, do_batch_norm=False, activation=False)
+        # final_activationsA = self.fc_layer(act, num_outputs, 'fc4A', 'main', False, do_batch_norm=False, activation=False)
+        # final_activationsB = self.fc_layer(act, num_outputs, 'fc4B', 'main', False, do_batch_norm=False, activation=False)
+        # final_activations = ShakeShake(final_activationsA, final_activationsB, tf.shape(final_activationsA), self.is_training)
 
         # pick apart the final output matrix into steering and throttle continuous values.
         slice_a = 1
@@ -147,17 +220,18 @@ class NNModel:
         self.regularizers = sum([tf.nn.l2_loss(tensor) for tensor in self.l2_collection])
 
         # Add regression loss to regularizers. Arbitrary scalars to balance out the 3 things and give regression steering priority
-        self.loss = 0.001 * self.regularizers + self.squared_diff*0.5 + self.squared_diff_throttle*1.0
+        # self.loss = 0.001 * self.regularizers + self.squared_diff*0.5 + self.squared_diff_throttle*1.0
+        self.loss = self.squared_diff*0.5 + self.squared_diff_throttle*1.0
         tf.summary.scalar('loss', self.loss)
         # -----------------------------------------------------------------------------------
 
         # http://stackoverflow.com/questions/35298326/freeze-some-variables-scopes-in-tensorflow-stop-gradient-vs-passing-variables
         optimizerA = tf.train.AdamOptimizer(3e-4)
         main_train_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "shared_fc") + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "shared_conv") + tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, "main")
-        self.train_step = optimizerA.minimize(self.loss, var_list=main_train_vars)
+        self.train_step = optimizerA.minimize(self.loss)#, var_list=main_train_vars)
 
 
-    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name, do_pool = True):
+    def conv_layer(self, tensor, channels_out, conv_size, name, scope_name, do_pool = True, visualize=False):
         channels_in = tensor.get_shape().as_list()[3]
         W_conv = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='W_' + name, coll=scope_name)
         self.l2_collection.append(W_conv)
@@ -167,18 +241,56 @@ class NNModel:
         h_conv = tf.nn.relu(normed)
         if do_pool:
             h_conv = avg_pool_2x2(h_conv)
+        if visualize:
+            self.visualizations[name + "_viz"] = ("conv_conv_in_out", W_conv)
         return h_conv
 
 
-    def fc_layer(self, tensor, channels_out, name, scope_name, dropout, batch_norm = False):
+    def conv_layer_shake(self, tensor, channels_out, conv_size, name, scope_name, do_pool = True, visualize=False):
+        batch_size = tf.shape(tensor)[0]
+        channels_in = tensor.get_shape().as_list()[3]
+        W_convA = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='WA_' + name, coll=scope_name)
+        W_convB = weight_variable_c([conv_size, conv_size, channels_in, channels_out], name='WB_' + name, coll=scope_name)
+        # W_convA = weight_variable_c_const([conv_size, conv_size, channels_in, channels_out], 0.0, name='WA_' + name, coll=scope_name)
+        # W_convB = weight_variable_c_const([conv_size, conv_size, channels_in, channels_out], 0.0, name='WB_' + name, coll=scope_name)
+        b_convA = bias_variable([channels_out], name='bA_' + name, coll=scope_name)
+        b_convB = bias_variable([channels_out], name='bB_' + name, coll=scope_name)
+        transA = conv2d(tensor, W_convA) + b_convA  # don't need the bias if batch norm is working.
+        transB = conv2d(tensor, W_convB) + b_convB  # don't need the bias if batch norm is working.
+        normedA = batch_norm(name, transA, channels_out, self.is_training, convolutional=True, scope='BNA')
+        normedB = batch_norm(name, transB, channels_out, self.is_training, convolutional=True, scope='BNB')
+        # h_convA = tf.nn.relu(transA)
+        # h_convB = tf.nn.relu(transB)
+        h_convA = tf.nn.relu(normedA)
+        h_convB = tf.nn.relu(normedB)
+        # h_convA = LeakyTrainable(normedA, name='SwishA_' + name, coll=scope_name)
+        # h_convB = LeakyTrainable(normedB, name='SwishB_' + name, coll=scope_name)
+        # h_convA = tf.concat([tf.nn.relu(normedA), tf.minimum(0.0, normedA)], 3)  # concatenated relus
+        # h_convB = tf.concat([tf.nn.relu(normedB), tf.minimum(0.0, normedB)], 3)
+
+        h_conv = ShakeShake(h_convA, h_convB, tf.shape(h_convA), self.is_training)
+
+        if do_pool:
+            h_conv = avg_pool_2x2(h_conv)
+            # h_conv = tf.nn.relu(conv_superpool_2x2(h_conv, channels_out, "superpool_" + name, coll=scope_name))
+        if visualize:
+            self.visualizations[name + "_vizA"] = ("conv_conv_in_out", W_convA)
+            self.visualizations[name + "_vizB"] = ("conv_conv_in_out", W_convB)
+        return h_conv
+
+
+    def fc_layer(self, tensor, channels_out, name, scope_name, dropout, do_batch_norm = False, activation = tf.nn.relu):
         channels_in = tensor.get_shape().as_list()[1]
         W_fc = weight_variable([channels_in, channels_out], channels_in, channels_out, name='W_' + name, coll=scope_name)
         self.l2_collection.append(W_fc)
         b_fc = bias_variable([channels_out], name='b_' + name, coll=scope_name)
         trans = tf.matmul(tensor, W_fc) + b_fc  # don't need the bias if batch norm is working.
-        if batch_norm:
+        if do_batch_norm:
             trans = batch_norm(name, trans, channels_out, self.is_training, convolutional=False, scope='BN')
-        h_fc = tf.nn.relu(trans)
+        if activation:
+            h_fc = activation(trans)
+        else:
+            h_fc = trans
         if dropout:
             h_fc = tf.nn.dropout(h_fc, self.keep_prob)
         return h_fc

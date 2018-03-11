@@ -21,20 +21,20 @@ if __name__ == '__main__':
 
 	# Load the model checkpoint file
 	try:
-	        tmp_file = config.tf_checkpoint_file
-	        print("Loading model from config: {}".format(tmp_file))
+		tmp_file = config.tf_checkpoint_file
+		print("Loading model from config: {}".format(tmp_file))
 	except:
-	    tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
-	    print "loading latest trained model: " + str(tmp_file)
-	        # print("CAN'T FIND THE GOOD MODEL")
-	        # sys.exit(-1)
+		tmp_file = config.load('last_tf_model') #gets the cached last tf trained model
+		print "loading latest trained model: " + str(tmp_file)
+		# print("CAN'T FIND THE model in config.")
+		# sys.exit(-1)
 
 	# Try to restore a session
 	try:
-	        saver.restore(sess, tmp_file)
+		saver.restore(sess, tmp_file)
 	except:
-	        print("Error restoring TF model: {}".format(tmp_file))
-	        # sys.exit(-1)
+		print("Error restoring TF model: {}".format(tmp_file))
+		sys.exit(-1)
 
 	image_tensor = net_model.in_image
 	G = tf.gradients(net_model.steering_regress_result, image_tensor)
@@ -54,21 +54,27 @@ if __name__ == '__main__':
 
 		gradient_image = flattened_gradient_image.reshape((128,128,3))
 
-		gradient_image_mono = np.sqrt(gradient_image[:,:,:]**2).sum(axis=2)
+		# WHAT IS THIS?
+		# gradient_image_mono = np.sqrt(gradient_image[:,:,:]**2).sum(axis=2)
+		gradient_image_mono = gradient_image[:,:,:].sum(axis=2)
+		gradient_image_mono_neg = np.maximum(0.0, -gradient_image_mono)
+		gradient_image_mono = np.maximum(0.0, gradient_image_mono)
 
 		gradient_image_mono_norm = (gradient_image_mono-gradient_image_mono.min())/(gradient_image_mono.max()-gradient_image_mono.min())
+		gradient_image_mono_norm_neg = (gradient_image_mono_neg-gradient_image_mono_neg.min())/(gradient_image_mono_neg.max()-gradient_image_mono_neg.min())
 
-		clip_percent = 0.25
-		clip_min = gradient_image_mono_norm.max()*clip_percent# Top energy?
-		gradient_image_mono_norm[gradient_image_mono_norm<clip_min] = 0
+		clip_percent = 0.5
+		# clip_min = gradient_image_mono_norm.max()*clip_percent# Top energy?
+		gradient_image_mono_norm[gradient_image_mono_norm<clip_percent] = 0
+		gradient_image_mono_norm_neg[gradient_image_mono_norm_neg<clip_percent] = 0
 
 		scale = np.zeros(list(gradient_image_mono_norm.shape)+[3], dtype=np.float32)
-		scale[:,:,0] = 0.0
+		scale[:,:,0] = gradient_image_mono_norm_neg
 		scale[:,:,1] = gradient_image_mono_norm
 		scale[:,:,2] = 0.0
 
 		image_rgb = batch.pic_array[i].reshape((128,128,3))
-		image_rgb_f = image_rgb.astype(np.float32)
+		image_rgb_f = image_rgb.astype(np.float32) * 0.5  # dim a little so you can see debugging colors
 
 		#figure(figsize=(20,20))
 		#subplot(1,2,1)

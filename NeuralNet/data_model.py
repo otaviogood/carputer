@@ -76,10 +76,10 @@ class TrainingData:
 
     def GenNoisyBatch(self, randIndexes):
         noisy_samples = 16
-        noise_level = 16.0
+        noise_level = 32.0
         randIndexes = range(randIndexes[0], randIndexes[0] + noisy_samples)
         i0 = randIndexes[0]
-        batch_xs = [self.pic_array[i0] + np.random.randn(49152) * noise_level for index in randIndexes]
+        batch_xs = [self.pic_array[i0] + np.random.randn(128*128*3) * noise_level for index in randIndexes]
         batch_xs_small = [self.pic_array_small[i0] for index in randIndexes]
         batch_xs_vel = [self.vel_array[i0] for index in randIndexes]
         batch_ys_regress = [self.steer_array[i0] for index in randIndexes]

@@ -175,42 +175,43 @@ while iteration < 1000*128:
             if len(sliding_window) > sliding_window_size: sliding_window = sliding_window[1:]
             sliding_window_graph.append(sum(sliding_window) / len(sliding_window))
 
-            html = HtmlDebug()
-            html.write_line("Iteration: " + str(iteration) + "&nbsp;&nbsp; MSE steer: " + str(results_squared_diff) + "&nbsp;&nbsp; MSE throttle: " + str(results_squared_diff_throttle))
-
-            plt_len = 2000
-            plt_start = 50
-            html.draw_graph([results_throttle_regress[plt_start:plt_len], test_data.throttle_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'THROTTLE   red: LSTM, green: labels    Iter: ' + str(iteration))
-            html.draw_graph([results_steering_regress[plt_start:plt_len], test_data.steer_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'STEERING   red: LSTM, green: labels    Iter: ' + str(iteration))
-            html.draw_graph([test_data.vel_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'Speed')
-
-            html.write_html(test_data, tf.get_default_graph(),
-                            sess, results_steering_regress, results_throttle_regress, net_model, test_data.FeedDict(net_model, is_training=False))
-            html.write_file(output_path)
-
             accuracy_check_iterations.append(iteration)
             allAccuracyTrain.append(train_steer_diff)
-            plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
-            plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
-            plt.plot(accuracy_check_iterations, allAccuracyTest, 'ro')
-            plt.plot(accuracy_check_iterations, allAccuracyTest, 'r-')
-            plt.plot(accuracy_check_iterations, sliding_window_graph, 'g-')
-            axes = plt.gca()
-            axes.set_ylim([0, 1000.05])
-            plt.title("training (blue), test (red), avg " + str(round(sliding_window_graph[-1], 5)) + "  /  " + str(
-                len(sliding_window)))
-            plt.xlabel('iteration')
-            plt.ylabel('diff squared')
-            plt.savefig(os.path.join(output_path, "progress.png"))
 
-            # Save the model.
             cool_score = results_squared_diff + results_squared_diff_throttle * 2.0
             if cool_score < best_total_score:
-              best_total_score = cool_score
-              save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
-              config.store('last_tf_model', save_path)
-              copyfile(os.path.join(output_path, "debug.html"), os.path.join(output_path, "debug_best.html"))
-              print("Saved: " + str(cool_score))
+                best_total_score = cool_score
+                html = HtmlDebug()
+                html.write_line("Iteration: " + str(iteration) + "&nbsp;&nbsp; MSE steer: " + str(results_squared_diff) + "&nbsp;&nbsp; MSE throttle: " + str(results_squared_diff_throttle))
+
+                plt_len = 2000
+                plt_start = 50
+                html.draw_graph([results_throttle_regress[plt_start:plt_len], test_data.throttle_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'THROTTLE   red: LSTM, green: labels    Iter: ' + str(iteration))
+                html.draw_graph([results_steering_regress[plt_start:plt_len], test_data.steer_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'STEERING   red: LSTM, green: labels    Iter: ' + str(iteration))
+                html.draw_graph([test_data.vel_array[plt_start+(net_model.n_steps-1):plt_len+(net_model.n_steps-1)]], 'Speed')
+
+                html.write_html(test_data, tf.get_default_graph(),
+                                sess, results_steering_regress, results_throttle_regress, net_model, test_data.FeedDict(net_model, is_training=False))
+                html.write_file(output_path)
+
+                # plt.plot(accuracy_check_iterations, allAccuracyTrain, 'bo')
+                # plt.plot(accuracy_check_iterations, allAccuracyTrain, 'b-')
+                # plt.plot(accuracy_check_iterations, allAccuracyTest, 'ro')
+                # plt.plot(accuracy_check_iterations, allAccuracyTest, 'r-')
+                # plt.plot(accuracy_check_iterations, sliding_window_graph, 'g-')
+                # axes = plt.gca()
+                # axes.set_ylim([0, 1000.05])
+                # plt.title("training (blue), test (red), avg " + str(round(sliding_window_graph[-1], 5)) + "  /  " + str(
+                #     len(sliding_window)))
+                # plt.xlabel('iteration')
+                # plt.ylabel('diff squared')
+                # plt.savefig(os.path.join(output_path, "progress.png"))
+
+                # Save the model.
+                save_path = saver.save(sess, os.path.join(output_path, "model.ckpt"))
+                config.store('last_tf_model', save_path)
+                copyfile(os.path.join(output_path, "debug.html"), os.path.join(output_path, "debug_best.html"))
+                print("Saved: " + str(cool_score))
 
             # put the print after writing everything so it indicates things have been written.
             debug_iteration = format(iteration, '^10')

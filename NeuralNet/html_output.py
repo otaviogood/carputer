@@ -112,8 +112,8 @@ class HtmlDebug:
         if rgb == True:
             d = 1
             b = 1
-            w = tensor.shape[dims - 3]
-            h = tensor.shape[dims - 2]
+            w = tensor.shape[dims - 2]
+            h = tensor.shape[dims - 3]
             if dims >= 4:
                 d = tensor.shape[dims - 4]
         self.buffer.append("<div style='border:2px;border-style:solid;border-color:#66a;margin-top:2px;padding:2px'>")
@@ -292,7 +292,7 @@ class HtmlDebug:
     def write_html(self, test_data, graph, sess, results_steering_regress, results_throttle_regress, net_model, feed_dict):
         # copyfile("track_extents_white.png", os.path.join(output_path, "track_extents_white.png"))
         image_count = len(results_steering_regress)
-        image_count = min(1000, image_count)
+        image_count = min(300, image_count)
 
         self.buffer.append("""
         <div id="topdiv">
@@ -354,6 +354,13 @@ class HtmlDebug:
                 # results = results[0].reshape((config.width, config.height, config.img_channels))
                 # results = results.transpose(3,0,1,2) # different because RGB
                 self.write_html_image_tensor_gray(results[0], True, 1, label=str(key))
+            if value[0] == 'conv_conv_in_out':
+                sizes = value[1].get_shape().as_list()
+                # results = results[0].reshape((config.width, config.height, config.img_channels))
+                results = sess.run(value[1])
+                # want: batch, depth,width, height
+                results = results.transpose(3, 2, 0, 1)
+                self.write_html_image_tensor_gray(results, False, 3, label=str(key))
 
         # results = sess.run(name_to_var['shared_conv/W_conv1:0'])
         # results = results.transpose(3,0,1,2) # different because RGB
