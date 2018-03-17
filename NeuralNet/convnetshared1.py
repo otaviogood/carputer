@@ -68,6 +68,8 @@ def Swish(x, name=None, coll=None):
     with tf.variable_scope(coll):
         beta = bias_variable([channels_in], init_val=1.0, name='b_' + name, coll=coll)
     return tf.nn.sigmoid(beta * x) * x
+def Swish1(x):
+    return tf.nn.sigmoid(x) * x
 
 
 def LeakyTrainable(x, name=None, coll=None):
@@ -170,6 +172,7 @@ class NNModel:
         act = self.conv_layer_shake(act, 12, 5, 'conv2', 'shared_conv', visualize=True)
         act = self.conv_layer_shake(act, 16, 5, 'conv3', 'shared_conv')
         act = self.conv_layer_shake(act, 64, 5, 'conv4', 'shared_conv')
+        act = self.conv_layer_shake(act, 192, 5, 'conv5', 'shared_conv')
 
         # act = self.conv_layer(act, 12, 5, 'conv2', 'shared_conv')
         # act = self.conv_layer(act, 16, 5, 'conv3', 'shared_conv')
@@ -183,7 +186,7 @@ class NNModel:
         # act = self.conv_layer_shake(act, 32, 3, 'conv4b', 'shared_conv', do_pool=True)
 
         act_flat = flatten_batch(act)
-        act = self.fc_layer(act_flat, 128, 'fc1', 'shared_fc', True, do_batch_norm=False)
+        act =act_flat# self.fc_layer(act_flat, 128, 'fc1', 'shared_fc', True, do_batch_norm=False)
         # actA = self.fc_layer(act_flat, 128, 'fc1A', 'shared_fc', True, do_batch_norm=False)
         # actB = self.fc_layer(act_flat, 128, 'fc1B', 'shared_fc', True, do_batch_norm=False)
         # act = ShakeShake(actA, actB, tf.shape(actA), self.is_training)
@@ -201,7 +204,7 @@ class NNModel:
 
         # Final transform without relu. Not doing l2 regularization on this because it just feels wrong.
         num_outputs = 1 + 1
-        final_activations = self.fc_layer(act, num_outputs, 'fc4', 'main', False, do_batch_norm=False, activation=False)
+        final_activations = self.fc_layer(act, num_outputs, 'fc4', 'main', False, do_batch_norm=False, activation=False, do_l2=False)
         # final_activationsA = self.fc_layer(act, num_outputs, 'fc4A', 'main', False, do_batch_norm=False, activation=False)
         # final_activationsB = self.fc_layer(act, num_outputs, 'fc4B', 'main', False, do_batch_norm=False, activation=False)
         # final_activations = ShakeShake(final_activationsA, final_activationsB, tf.shape(final_activationsA), self.is_training)
@@ -259,8 +262,6 @@ class NNModel:
         transB = conv2d(tensor, W_convB) + b_convB  # don't need the bias if batch norm is working.
         normedA = batch_norm(name, transA, channels_out, self.is_training, convolutional=True, scope='BNA')
         normedB = batch_norm(name, transB, channels_out, self.is_training, convolutional=True, scope='BNB')
-        # h_convA = tf.nn.relu(transA)
-        # h_convB = tf.nn.relu(transB)
         h_convA = tf.nn.relu(normedA)
         h_convB = tf.nn.relu(normedB)
         # h_convA = LeakyTrainable(normedA, name='SwishA_' + name, coll=scope_name)
@@ -279,10 +280,11 @@ class NNModel:
         return h_conv
 
 
-    def fc_layer(self, tensor, channels_out, name, scope_name, dropout, do_batch_norm = False, activation = tf.nn.relu):
+    def fc_layer(self, tensor, channels_out, name, scope_name, dropout, do_batch_norm = False, activation = tf.nn.relu, do_l2=True):
         channels_in = tensor.get_shape().as_list()[1]
         W_fc = weight_variable([channels_in, channels_out], channels_in, channels_out, name='W_' + name, coll=scope_name)
-        self.l2_collection.append(W_fc)
+        if do_l2:
+            self.l2_collection.append(W_fc)
         b_fc = bias_variable([channels_out], name='b_' + name, coll=scope_name)
         trans = tf.matmul(tensor, W_fc) + b_fc  # don't need the bias if batch norm is working.
         if do_batch_norm:
