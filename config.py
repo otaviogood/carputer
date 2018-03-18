@@ -11,7 +11,7 @@ running_on_laptop = True
 # Should tensorflow use the GPU - only for the car, this var not used for training.
 should_use_gpu = 0
 
-camera_id = 1 
+camera_id = 1
 # Uncomment the following line to specify the path of the trained mdodel, or put the uncommented line in local_config.py.
 # If no tf_checkpoint_file variable is found, the latest generated model is loaded.
 #tf_checkpoint_file = "/Users/otaviogood/convnet02-results/2016_11_06__04_48_13_PM/model.ckpt" 
@@ -70,4 +70,4 @@ CAR_SYNC_METHOD='airdrop'
 CAR_AIRDROP_FOLDER='/Users/otaviogood/Downloads/'
 
 stuck_override=True
-use_override_random_error=True
+use_override_random_error=False

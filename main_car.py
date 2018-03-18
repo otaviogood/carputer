@@ -85,10 +85,11 @@ class override_state_random_error(object):
 		self.t0 = None
 		self.random_steering = 0.0
 
-	def tick(self, t):
+	def tick(self, t, steering):
 		if self.t0 is None:
 			self.t0 = t
 
+		#print t-self.t0,self.state
 		# State changes
 		if self.state == 'driving':
 			
@@ -96,18 +97,19 @@ class override_state_random_error(object):
 				self.state = 'override'
 				self.t0 = t
 				# Maybe add throttle later
-				self.random_steering = np.clip(90 + np.random.normal(90), -90, 90)
+				self.random_steering = np.clip(90 + np.random.normal(0, 90), -90, 90)
 
 		elif self.state == 'override':
 			
-			if t-self.t0 > 0.25:
+			if t-self.t0 > 0.17:
 				self.state = 'driving'
 				self.t0 = t
 
 		# State handling
-		if state == 'override':
-			global throttle,streering
+		if self.state == 'override':
 			steering = self.random_steering
+
+		return steering
 
 override_random_error = override_state_random_error()
 
@@ -123,7 +125,7 @@ def setup_serial_and_reset_arduinos():
 		name_in = 'COM3'
 		name_out = 'COM4'
 	else:
-		name_in = '/dev/cu.usbmodem14111'  # 5v Arduino Uno (16 bit)
+		name_in = '/dev/cu.usbmodem14141'  # 5v Arduino Uno (16 bit)
 		name_out = '/dev/cu.usbmodem14131'  # 3.3v Arduino Due (32 bit)
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
@@ -313,6 +315,8 @@ def invert_log_bucket(a):
 def setup_tensorflow():
 		"""Restores a tensorflow session and returns it if successful
 		"""
+		print("Tensorflow version: " + tf.__version__)
+
 		net_model = NNModel()
 
 		tf_config = tf.ConfigProto(device_count = {'GPU':config.should_use_gpu})
@@ -349,8 +353,10 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 
 	# Setup the data and run tensorflow
 	batch = TrainingData.FromRealLife(resized, odo_ticks, vel)
-	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_regress_result], feed_dict=batch.FeedDict(net_model))
+	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_regress_result], feed_dict=batch.FeedDict(net_model))	
+	#steer_regression *= 1.2
 	steer_regression += 90
+	# throttle_regression *= 1.2
 	throttle_regression += 90
 	# print(throttle_regression)
 
@@ -487,6 +493,12 @@ def main():
 		# Switch was just flipped.
 		if last_switch != button_arduino_out:
 			last_switch = button_arduino_out
+
+			# resets stuck_override status
+			last_time_when_nonzero_velocity = -1
+			stuck_override_start = -1
+			stuck_override_active = False
+
 			# See if the car started up with the switch already flipped.
 			# if time.time() - drive_start_time < 1:
 			# 	print 'Error: start switch in the wrong position.'
@@ -577,13 +589,15 @@ def main():
 				global last_time_when_nonzero_velocity, stuck_override_start, stuck_override_active
 				stt = time.time()
 
-				if vel > 0.001:
+				if vel > 0.0:
 					last_time_when_nonzero_velocity = stt
+
+				#print throttle,stuck_override_active,stt - stuck_override_start,stt - last_time_when_nonzero_velocity
 				
 				if stuck_override_active:
-					throttle = 160
+					throttle = 115
 
-					if stt - stuck_override_start > 1.0:
+					if stt - stuck_override_start > 1.0: # How long to force throttle for: 1.0s
 						stuck_override_active = False
 
 				else:
@@ -597,7 +611,7 @@ def main():
 
 		global override_random_error
 		if we_are_recording and currently_running and config.use_override_random_error:
-			override_random_error.tick(loop_start_time)
+			steering = override_random_error.tick(loop_start_time, steering)
 
 		if we_are_recording and currently_running and override_random_error.state != 'override':
 			# TODO(matt): also record vel in filename for tf?
