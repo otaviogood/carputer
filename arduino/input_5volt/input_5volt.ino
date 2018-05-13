@@ -3,6 +3,8 @@ int prev_s = -10;
 const int BUTTON_PIN = 2;
 const int REMOTE_BUTTON = 3;
 
+bool remoteIsOff = true;
+
 void setup() {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(4, INPUT);
@@ -27,6 +29,16 @@ void loop() {
   // Read the length of the pulse in microseconds
   int steering = (int)pulseIn(4, HIGH, 25000);
   int throttle = (int)pulseIn(5, HIGH, 25000);
+  if(throttle == 0)
+  {
+    // The controller is off
+    remoteIsOff = true;
+    
+  }
+  else
+  {
+    remoteIsOff = false;
+  }
   int remote_button = (int)pulseIn(REMOTE_BUTTON, HIGH, 25000);
 
   // Observed ranges:
@@ -37,15 +49,26 @@ void loop() {
   const int loss = 5;
 
   // Map input to: min = 0, center = 90, max = 180
-  //steering = clamp(90 + (steering - 1401) * (90 / loss) / (331 / loss), 0, 180);
-  throttle = clamp(90 + (throttle - 1503) * (90 / loss) / (445 / loss), 0, 180);
-  throttle = map(throttle, 180, 0, 0, 180);
+  steering = clamp(90 + (steering - 1401) * (90 / loss) / (331 / loss), 0, 180);
+  steering = map(steering, 180, 0, 0, 180);
 
-  //Serial.println(steering);
-  //Serial.print(" ");
-  Serial.println(throttle);
-  //Serial.print(" ");
-  //Serial.println(remote_button);
+  if(remoteIsOff)
+  {
+    throttle = 0;
+  }
+  else
+  {
+    throttle = clamp(90 + (throttle - 1503) * (90 / loss) / (445 / loss), 0, 180);
+    throttle = map(throttle, 180, 0, 0, 180);
+  }
+
+
+  Serial.print(steering);
+  Serial.print(" ");
+  Serial.print(throttle);
+  Serial.print(" ");
+  Serial.println(remote_button);
+  
   // delay for good luck. pulseIn should have already delayed
   // by a bit.
   delay(1);
