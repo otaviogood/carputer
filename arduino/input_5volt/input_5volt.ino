@@ -30,21 +30,21 @@ void loop() {
   int remote_button = (int)pulseIn(REMOTE_BUTTON, HIGH, 25000);
 
   // Observed ranges:
-  // - steering: min = 1175, center = 1475, max = 1840
+  // - steering: Left = 1070, center = 1401, Left = 1733
   // - throttle: min = 1010, center = 1465, max = 1975
 
   // Deliberately use less precision to avoid 16-bit overflow
   const int loss = 5;
 
   // Map input to: min = 0, center = 90, max = 180
-  steering = clamp(90 + (steering - 1475) * (90 / loss) / (300 / loss), 0, 180);
-  throttle = clamp(90 + (throttle - 1465) * (90 / loss) / (455 / loss), 0, 180);
+  steering = clamp(90 + (steering - 1401) * (90 / loss) / (331 / loss), 0, 180);
+//  throttle = clamp(90 + (throttle - 1465) * (90 / loss) / (455 / loss), 0, 180);
 
-  Serial.print(steering);
-  Serial.print(" ");
-  Serial.print(throttle);
-  Serial.print(" ");
-  Serial.println(remote_button);
+  Serial.println(steering);
+  //Serial.print(" ");
+  //Serial.print(throttle);
+  //Serial.print(" ");
+  //Serial.println(remote_button);
   // delay for good luck. pulseIn should have already delayed
   // by a bit.
   delay(1);
