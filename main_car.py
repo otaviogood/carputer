@@ -93,7 +93,7 @@ class override_state_random_error(object):
 		# State changes
 		if self.state == 'driving':
 			
-			if t-self.t0 > 5.0:
+			if t-self.t0 > 7.0:
 				self.state = 'override'
 				self.t0 = t
 				# Maybe add throttle later
@@ -101,7 +101,7 @@ class override_state_random_error(object):
 
 		elif self.state == 'override':
 			
-			if t-self.t0 > 0.17:
+			if t-self.t0 > 0.08:
 				self.state = 'driving'
 				self.t0 = t
 
