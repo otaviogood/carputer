@@ -66,3 +66,40 @@ Updates - We no longer use the IMUs and we're no longer trying to run the NVidia
 Work in progress, of course. The simulator runs in Unity. I didn't check in the lighting files because they are big, but if you build lighting, it should look like this...
 ![Unity sim](https://github.com/otaviogood/carputer/blob/master/warehouse_sim.jpg "Unity sim")
 
+
+## Nvidia TX2 Pipeline
+In the "newer" version of the car we replaced the MacBook Pro with an Nvidia TX2. Here is the current way to get the car up and running (with all the weird quirks)
+
+### Connecting to the vehicle
+
+The vehicle will spin up an access point with SSID `carputer-ap` on boot. It is unprotected.
+
+The TX2 will take the IP address of `10.42.0.1`. Hostname is `nvidia` and the password is `nvidia`. *Note* to drivers at the races: Please don't hack our car.
+
+### Gather Training Data
+The training pipeline is relativly the same as described in the README, with a few quality of life improvements. 
+
+To start gathering training data, run the following command
+
+`record`
+
+That will start the `python main_car.py` script with a few extra commands to make sure it keeps running even if we lose connection with the vehicle.
+
+
+### Train on the vehicle?
+You can do that. It is pretty slow, but not too bad. The commands are exactly the same as described in the README. However, one note (and this applies to gathering training data too) is that currently the TX2 has very little hard disk memory (less than 20GB nominally). 
+
+The requires the user to make sure that there is enough space to check if there is enough disk space to write the training images, training npy files, and the models.
+
+I like to use `df -h` or `ncdu` to see where the most disk space is and `rm` accordingly. 
+
+### Run a trained model
+Again, the pipeline is pretty much the same with a few minor changes.
+
+Unless you understand how the `dyn_config.json` works, your best bet to load your most recently trained model is to edit the `config.py` file to the model you want to load.
+
+To run, simply type `tf`. That will start up the script to run the car in autonomous mode. 
+
+If at any point you want to stop gathering training data or autonmous data, please run the command `kill-car`. It really just `pkill`s python, but it is nice to just remember that you want to kill the car.
+
+
