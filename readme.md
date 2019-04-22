@@ -70,6 +70,15 @@ Work in progress, of course. The simulator runs in Unity. I didn't check in the 
 ## Nvidia TX2 Pipeline
 In the "newer" version of the car we replaced the MacBook Pro with an Nvidia TX2. Here is the current way to get the car up and running (with all the weird quirks)
 
+### TX2 Helpers
+The TX2 has a few helper aliases on the vehicle. They are located in the `~/.bashrc` and are able to be called anywhere. Here they are:
+
+```
+alias record="nohup python2 /home/nvidia/workspace/carputer/main_car.py record & tail -f nohup.out"
+alias tf="nohup python2 /home/nvidia/workspace/carputer/main_car.py tf & tail -f nohup.out"
+alias kill-car="pkill python"
+```
+
 ### Connecting to the vehicle
 
 The vehicle will spin up an access point with SSID `carputer-ap` on boot. It is unprotected.
