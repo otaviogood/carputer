@@ -85,8 +85,8 @@ else: assert False  # Bad training mode in config.py.
 numTest = 8000
 skipTest = 1
 if config.running_on_laptop:
-    numTest = 8500# 384 * 8
-    skipTest = 1
+    numTest = 3072 # 384 * 8
+    skipTest = 4
 test_data.TrimArray(numTest, skipTest)
 assert test_data.NumSamples() >= net_model.n_steps
 

@@ -44,8 +44,6 @@ from NeuralNet.data_model import TrainingData
 
 # Get args.
 args = docopt(__doc__)
-
-
 # Check the mode: recording vs TF driving vs TF driving + recording.
 if args['record']:
 	we_are_autonomous = False
@@ -55,7 +53,7 @@ elif args['tf']:
 	we_are_autonomous = True
 	we_are_recording = True
 	print("\n****** READY TO DRIVE BY NEURAL NET and record data ******\n")
-
+	print("Using model: {}".format(config.tf_checkpoint_file))
 
 # Set up camera and key watcher.
 camera_stream = camera.CameraStream(src=config.camera_id).start()
@@ -124,9 +122,13 @@ def setup_serial_and_reset_arduinos():
 	if os.name == 'nt':
 		name_in = 'COM3'
 		name_out = 'COM4'
+	elif os.name == 'posix':
+		name_in = '/dev/ttyUSB0'
+		name_out = '/dev/ttyACM0'
 	else:
 		name_in = '/dev/cu.usbmodem14141'  # 5v Arduino Uno (16 bit)
 		name_out = '/dev/cu.usbmodem14131'  # 3.3v Arduino Due (32 bit)
+
 	# 5 volt Arduino Duemilanove, radio controller for input.
 	port_in = serial.Serial(name_in, 38400, timeout=0.0)
 	# 3 volt Arduino Due, servos for output.
@@ -356,7 +358,7 @@ def do_tensorflow(sess, net_model, frame, odo_ticks, vel):
 	[steer_regression, throttle_regression] = sess.run([net_model.steering_regress_result, net_model.throttle_regress_result], feed_dict=batch.FeedDict(net_model))	
 	#steer_regression *= 1.2
 	steer_regression += 90
-	# throttle_regression *= 1.2
+	throttle_regression *= 1.05
 	throttle_regression += 90
 	# print(throttle_regression)
 
@@ -597,7 +599,7 @@ def main():
 				if stuck_override_active:
 					throttle = 115
 
-					if stt - stuck_override_start > 1.0: # How long to force throttle for: 1.0s
+					if stt - stuck_override_start > 0.9: # How long to force throttle for: 1.0s
 						stuck_override_active = False
 
 				else:
